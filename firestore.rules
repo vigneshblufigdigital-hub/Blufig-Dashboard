@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role Lookups (O(1) lookups in rules)
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        getUserData().role == 'AGENCY_ADMIN' || 
+        request.auth.token.email == 'vigneshatwork21@gmail.com'
+      );
+    }
+
+    function isInternal() {
+      return isSignedIn() && getUserData().role != 'CLIENT';
+    }
+
+    function isAMForProject(projectId) {
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/projects/$(projectId)).data.accountManagerId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 &&
+             data.email is string &&
+             data.role is string;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['clientId', 'accountManagerId', 'name', 'type', 'status']) &&
+             isValidId(data.clientId) &&
+             isValidId(data.accountManagerId) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.type in ['Retainer', 'One-Off Project', 'Always-On'] &&
+             data.status in ['Active', 'On Hold', 'Completed', 'Cancelled'];
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['projectId', 'name', 'type', 'status', 'priority', 'dueDate']) &&
+             isValidId(data.projectId) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.status in ['Not Started', 'In Progress', 'In Review', 'Revision Requested', 'Approved', 'Done', 'Blocked', 'Cancelled'] &&
+             data.priority in ['Low', 'Normal', 'High', 'Critical'];
+    }
+
+    function isValidSubTask(data) {
+      return data.keys().hasAll(['taskId', 'name', 'isCompleted']) &&
+             isValidId(data.taskId) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.isCompleted is bool;
+    }
+
+    // Match Blocks
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidUser(incoming()) && (isAdmin() || request.auth.uid == userId);
+      allow update: if isSignedIn() && isValidUser(incoming()) && (isAdmin() || (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl', 'skillTags'])));
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isInternal() || (isSignedIn() && existing().clientId == request.auth.uid);
+      allow create: if isAdmin() || (isInternal() && isValidProject(incoming()));
+      allow update: if isAdmin() || (isAMForProject(projectId) && isValidProject(incoming()));
+      allow delete: if isAdmin();
+
+      match /tasks/{taskId} {
+        allow read: if isInternal() || (isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        allow create, update: if isInternal() && isValidTask(incoming());
+        allow delete: if isAdmin() || isAMForProject(projectId);
+
+        match /subtasks/{subtaskId} {
+          allow read: if isInternal() || (isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+          allow create, update: if isInternal() && isValidSubTask(incoming());
+          allow delete: if isAdmin() || isAMForProject(projectId);
+        }
+      }
+
+      match /deliverables/{deliverableId} {
+        allow read: if isInternal() || (isSignedIn() && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+        allow create, update: if isInternal();
+        allow delete: if isAdmin() || isAMForProject(projectId);
+      }
+    }
+  }
+}

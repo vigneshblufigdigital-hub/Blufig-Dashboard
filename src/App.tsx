@@ -12,13 +12,16 @@ import {
   Activity,
   LogOut,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'motion/react';
 import { MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS } from './mockData';
 import { UserRole, Project, Task, ProjectType, TaskStatus, Priority, UserProfile, ClientReport, ClientInvoice, ADMIN_ROLES } from './types';
 import { cn } from '@/lib/utils';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 import { ProjectBoard } from './components/dashboard/ProjectBoard';
 import { TaskEngine } from './components/dashboard/TaskEngine';
@@ -45,6 +48,7 @@ import { Toaster } from 'sonner';
 
 function Dashboard() {
   const { user, setUser, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(user.role === UserRole.CLIENT ? 'portal' : 'overview');
@@ -223,7 +227,7 @@ function Dashboard() {
   const isClient = user.role === UserRole.CLIENT;
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 font-sans text-zinc-900">
+    <div className="flex min-h-screen bg-background font-sans text-foreground transition-colors duration-200">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:flex-shrink-0">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={user.role} />
@@ -247,13 +251,13 @@ function Dashboard() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="relative flex w-full max-w-xs flex-1 flex-col bg-white h-full shadow-2xl"
+              className="relative flex w-full max-w-xs flex-1 flex-col bg-card h-full shadow-2xl"
             >
               <div className="absolute right-4 top-4 z-50">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-zinc-500 hover:text-zinc-900 rounded-full hover:bg-zinc-100"
+                  className="h-8 w-8 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   onClick={() => setSidebarOpen(false)}
                 >
                   <X className="w-5 h-5" />
@@ -277,13 +281,13 @@ function Dashboard() {
       
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-16 flex items-center justify-between px-4 sm:px-8 bg-white border-b sticky top-0 z-10 gap-4">
+        <header className="h-16 flex items-center justify-between px-4 sm:px-8 bg-card border-b border-border sticky top-0 z-10 gap-4 transition-colors duration-200">
           <div className="flex items-center space-x-3 sm:space-x-4 flex-1 max-w-xl">
             {/* Mobile Hamburger Menu Toggle Button */}
             <Button 
               variant="outline" 
               size="icon" 
-              className="lg:hidden h-9 w-9 shrink-0 text-zinc-650 border-zinc-200"
+              className="lg:hidden h-9 w-9 shrink-0 text-zinc-650 dark:text-zinc-400 border-border"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu className="w-5 h-5" />
@@ -293,28 +297,45 @@ function Dashboard() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <Input 
                 placeholder="Search projects, tasks, or experts..." 
-                className="pl-10 h-9 bg-zinc-50 border-none focus-visible:ring-1 focus-visible:ring-zinc-200" 
+                className="pl-10 h-9 bg-zinc-50 dark:bg-zinc-900 border-none focus-visible:ring-1 focus-visible:ring-border text-foreground placeholder:text-zinc-400" 
               />
             </div>
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
-            <Button variant="ghost" size="icon" className="text-zinc-650" onClick={() => logout()}>
+            {/* Theme Toggle Button */}
+            <motion.div whileTap={{ scale: 0.9 }}>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
+                onClick={toggleTheme}
+                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-amber-500 hover:rotate-45 transition-transform" />
+                ) : (
+                  <Moon className="w-5 h-5 text-zinc-700 hover:text-indigo-600" />
+                )}
+              </Button>
+            </motion.div>
+
+            <Button variant="ghost" size="icon" className="text-zinc-650 dark:text-zinc-400" onClick={() => logout()}>
               <LogOut className="w-5 h-5 text-red-500" />
             </Button>
             
-            <Button variant="ghost" size="icon" className="text-zinc-650">
+            <Button variant="ghost" size="icon" className="text-zinc-650 dark:text-zinc-400">
               <Bell className="w-5 h-5" />
             </Button>
             
-            <div className="h-8 w-[1px] bg-zinc-200 hidden sm:block mx-1" />
+            <div className="h-8 w-[1px] bg-border hidden sm:block mx-1" />
             
             <div className="flex items-center space-x-2 sm:space-x-3 cursor-pointer group shrink-0" onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}>
               <div className="text-right hidden md:block">
-                <p className="text-sm font-semibold leading-none">{user.name}</p>
-                <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider mt-1">{user.designation}</p>
+                <p className="text-sm font-semibold leading-none text-zinc-900 dark:text-zinc-100">{user.name}</p>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wider mt-1">{user.designation}</p>
               </div>
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-900 border-2 border-transparent group-hover:border-brand-secondary transition-all flex items-center justify-center text-white font-bold shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-900 dark:bg-zinc-700 border-2 border-transparent group-hover:border-brand-secondary transition-all flex items-center justify-center text-white font-bold shrink-0">
                 {user.name.charAt(0)}
               </div>
             </div>
@@ -325,25 +346,25 @@ function Dashboard() {
         <div className="px-4 sm:px-8 py-6 sm:py-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
             <div>
-              <div className="flex items-center space-x-2 text-xs text-zinc-400 font-medium uppercase tracking-widest mb-1">
+              <div className="flex items-center space-x-2 text-xs text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-widest mb-1">
                 <span>{isClient ? 'Client Portal' : 'Agency Dashboard'}</span>
-                <ChevronRight className="w-3 h-3" />
-                <span className="text-zinc-900">{activeTab}</span>
+                <ChevronRight className="w-3 h-3 text-zinc-400" />
+                <span className="text-zinc-900 dark:text-zinc-100">{activeTab}</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 capitalize">
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 capitalize">
                 {activeTab === 'portal' ? 'Client' : activeTab} Workspace
               </h2>
             </div>
             
             {!isClient && (
               <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto justify-end">
-                <Button variant="outline" size="sm" className="h-10 border-zinc-200">
+                <Button variant="outline" size="sm" className="h-10 border-border text-foreground bg-card hover:bg-muted">
                   <Filter className="w-4 h-4 mr-2" />
                   Filters
                 </Button>
                 <Button 
                   size="sm" 
-                  className="h-10 bg-zinc-900 hover:bg-zinc-800 text-white px-4 sm:px-6 flex-1 sm:flex-none"
+                  className="h-10 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-4 sm:px-6 flex-1 sm:flex-none cursor-pointer"
                   onClick={() => setIsCreateDialogOpen(true)}
                 >
                   Create New
@@ -517,9 +538,11 @@ function Dashboard() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Toaster position="top-right" expand={true} richColors />
-      <Dashboard />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Toaster position="top-right" expand={true} richColors />
+        <Dashboard />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -14,7 +14,11 @@ import {
   Menu,
   X,
   Sun,
-  Moon
+  Moon,
+  CheckCheck,
+  Trash2,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'motion/react';
@@ -128,6 +132,69 @@ function Dashboard() {
   ).slice(0, 4);
 
   const hasSearchResults = filteredProjectsForSearch.length > 0 || filteredTasksForSearch.length > 0 || filteredUsersForSearch.length > 0;
+
+  // Stateful notifications loop
+  interface NotificationItem {
+    id: string;
+    title: string;
+    message: string;
+    time: string;
+    isRead: boolean;
+    type: 'info' | 'alert' | 'success' | 'task';
+  }
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    {
+      id: 'noti-1',
+      title: 'Active Project Assigned',
+      message: 'You have been assigned to supervise the BluFig Brand Identity & Campaign streams.',
+      time: '1 hr ago',
+      isRead: false,
+      type: 'info'
+    },
+    {
+      id: 'noti-2',
+      title: 'High Priority Milestone',
+      message: 'Workflow item "Refine campaign design system" is scheduled for tomorrow evening.',
+      time: '3 hrs ago',
+      isRead: false,
+      type: 'alert'
+    },
+    {
+      id: 'noti-3',
+      title: 'Retainer Invoice Processed',
+      message: 'The secure invoice #INV-2024-001 has been marked successfully as Paid.',
+      time: 'Yesterday',
+      isRead: true,
+      type: 'success'
+    },
+    {
+      id: 'noti-4',
+      title: 'Logs verified',
+      message: 'Strategic hour worksheets for this week were processed and verified.',
+      time: '2 days ago',
+      isRead: true,
+      type: 'info'
+    }
+  ]);
+
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleMarkAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    toast.success("All notifications marked as read!");
+  };
+
+  const handleClearAll = () => {
+    setNotifications([]);
+    toast.info("Notifications cleared successfully.");
+  };
+
+  const handleToggleRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n));
+  };
 
 
   // Lifted Timer State running in background on tab changes
@@ -727,9 +794,132 @@ function Dashboard() {
               <LogOut className="w-5 h-5 text-red-500" />
             </Button>
             
-            <Button variant="ghost" size="icon" className="text-zinc-650 dark:text-zinc-400">
-              <Bell className="w-5 h-5" />
-            </Button>
+            <div className="relative">
+              <motion.div whileTap={{ scale: 0.9 }}>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-zinc-650 dark:text-zinc-400 relative hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  title="View Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </motion.div>
+
+              {/* Notifications Dropdown Window */}
+              {isNotificationsOpen && (
+                <>
+                  {/* Backdrop overlay to safely click off and close */}
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setIsNotificationsOpen(false)} 
+                  />
+                  
+                  <div className="absolute -right-12 sm:right-0 mt-2 w-[calc(100vw-32px)] xs:w-80 sm:w-96 max-w-[360px] sm:max-w-none bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden font-sans origin-top-right animate-in fade-in slide-in-from-top-3 duration-250">
+                    <div className="p-4 border-b border-border flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/20">
+                      <div>
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Live Workspace Briefs</h4>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold">{unreadCount} unread update{(unreadCount === 1) ? '' : 's'}</p>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        {unreadCount > 0 && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-[10px] h-7 font-bold text-brand-secondary px-2 rounded-xl"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAllRead();
+                            }}
+                          >
+                            <CheckCheck className="w-3 h-3 mr-1" />
+                            Mark all read
+                          </Button>
+                        )}
+                        {notifications.length > 0 && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-[10px] h-7 font-bold text-zinc-400 hover:text-red-500 px-2 rounded-xl"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClearAll();
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost" 
+                          size="icon" 
+                          className="w-7 h-7 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                          onClick={() => setIsNotificationsOpen(false)}
+                          title="Close Panel"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-[320px] overflow-y-auto divide-y divide-border">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-zinc-400 dark:text-zinc-500 space-y-2">
+                          <CheckCircle className="w-8 h-8 text-zinc-300 dark:text-zinc-700 mx-auto" />
+                          <p className="text-xs font-medium">All caught up!</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500">New system briefings will appear here.</p>
+                        </div>
+                      ) : (
+                        notifications.map(notif => (
+                          <div 
+                            key={notif.id}
+                            onClick={() => handleToggleRead(notif.id)}
+                            className={cn(
+                              "p-3.5 flex items-start space-x-3 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors select-none",
+                              !notif.isRead ? "bg-orange-500/[0.02]" : "opacity-80"
+                            )}
+                          >
+                            <div className="pt-0.5">
+                              {notif.type === 'alert' ? (
+                                <AlertCircle className="w-4 h-4 text-orange-500" />
+                              ) : notif.type === 'success' ? (
+                                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <AlertCircle className="w-4 h-4 text-blue-500" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className={cn(
+                                  "text-xs truncate",
+                                  !notif.isRead ? "font-bold text-zinc-950 dark:text-zinc-100" : "font-medium text-zinc-650 dark:text-zinc-400"
+                                )}>
+                                  {notif.title}
+                                </p>
+                                <span className="text-[9px] text-zinc-400 font-mono shrink-0 ml-2">
+                                  {notif.time}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed font-sans">
+                                {notif.message}
+                              </p>
+                              {!notif.isRead && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-secondary mt-1.5" />
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             
             <div className="h-8 w-[1px] bg-border hidden sm:block mx-1" />
             
@@ -978,7 +1168,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Toaster position="top-right" expand={true} richColors />
+        <Toaster position="top-right" expand={true} richColors closeButton />
         <DashboardWrapper />
       </AuthProvider>
     </ThemeProvider>

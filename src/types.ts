@@ -116,6 +116,14 @@ export interface SubTask {
   createdAt: string;
 }
 
+export interface TaskWorkflowStep {
+  id: string;
+  name: string;
+  assigneeId: string;
+  isCompleted: boolean;
+  completedAt?: string;
+}
+
 export interface Task {
   id: string;
   projectId: string;
@@ -131,8 +139,18 @@ export interface Task {
   description?: string;
   timeEstimate?: number; // in hours
   timeLogged?: number; // in hours
+  timeLoggedSeconds?: number; // in seconds
   blockerIds?: string[];
   subTasks?: SubTask[]; // Added for UI convenience
+  workflowSteps?: TaskWorkflowStep[];
+  currentStepIndex?: number;
+  
+  // Recurrence Fields
+  isRecurring?: boolean;
+  recurrenceInterval?: number; // e.g. 1 (every period), 2 (every second period)
+  recurrenceTimes?: number; // e.g. thrice (3 times), monthly (12 times)
+  recurrencePeriod?: 'week' | 'month'; // e.g. weekly or monthly recurrence
+  recurrenceProgress?: number; // how many recurring tasks have been generated so far
 }
 
 export interface Deliverable {

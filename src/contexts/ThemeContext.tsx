@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
+type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  fontSize: FontSize;
+  setFontSize: (size: FontSize) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -22,6 +25,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return 'light';
   });
 
+  const [fontSize, setFontSizeState] = useState<FontSize>(() => {
+    const stored = localStorage.getItem('fontSize') as FontSize | null;
+    if (stored === 'sm' || stored === 'base' || stored === 'lg' || stored === 'xl') {
+      return stored;
+    }
+    return 'base';
+  });
+
   useEffect(() => {
     const root = window.document.documentElement;
     if (theme === 'dark') {
@@ -32,12 +43,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem('fontSize', fontSize);
+  }, [fontSize]);
+
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
+  const setFontSize = (size: FontSize) => {
+    setFontSizeState(size);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, fontSize, setFontSize }}>
       {children}
     </ThemeContext.Provider>
   );

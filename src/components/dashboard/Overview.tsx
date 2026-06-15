@@ -49,7 +49,7 @@ export function Overview({ projects, tasks }: { projects: any[], tasks: any[] })
     <div className="space-y-6">
       <div className="mb-8">
         <h3 className="text-xl font-bold tracking-tight text-zinc-900">
-          Good day, {user?.name.split(' ')[0]}
+          Good day, {user?.name ? user.name.split(' ')[0] : 'Guest'}
         </h3>
         <p className="text-sm text-zinc-500">Here's what's happening in your workspace today.</p>
       </div>

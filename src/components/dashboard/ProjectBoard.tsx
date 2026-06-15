@@ -75,7 +75,7 @@ export function ProjectBoard({
                 <div className="flex items-center space-x-2 p-2 rounded-lg bg-zinc-50 border border-zinc-100">
                   <Users className="w-3 h-3 text-zinc-400" />
                   <div className="min-w-0">
-                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">Lead AM</p>
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">Project AM</p>
                     <p className="text-xs font-semibold truncate">{am?.name || 'Unassigned'}</p>
                   </div>
                 </div>

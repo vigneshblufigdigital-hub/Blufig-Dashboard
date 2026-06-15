@@ -26,12 +26,13 @@ import {
   Square,
   Activity,
   LayoutGrid,
-  List
+  List,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { TaskStatus, Priority, Task, SubTask, UserRole, Project, UserProfile, ADMIN_ROLES } from '@/src/types';
+import { TaskStatus, Priority, Task, SubTask, TaskWorkflowStep, UserRole, Project, UserProfile, ADMIN_ROLES } from '@/src/types';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -65,9 +66,28 @@ interface TaskEngineProps {
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   projects: Project[];
   users: UserProfile[];
+  activeTimerTaskId: string | null;
+  setActiveTimerTaskId: React.Dispatch<React.SetStateAction<string | null>>;
+  elapsedTimes: Record<string, number>;
+  setElapsedTimes: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  formatTime: (seconds: number) => string;
+  toggleTimer: (taskId: string, e?: any) => void;
 }
 
-export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, projects, users }: TaskEngineProps) {
+export function TaskEngine({ 
+  filterProjectId, 
+  onClearFilter, 
+  tasks, 
+  setTasks, 
+  projects, 
+  users,
+  activeTimerTaskId,
+  setActiveTimerTaskId,
+  elapsedTimes,
+  setElapsedTimes,
+  formatTime,
+  toggleTimer
+}: TaskEngineProps) {
   const { user } = useAuth();
   const [filter, setFilter] = useState('active');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
@@ -181,58 +201,13 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
     const sourceTask = tasks.find(t => t.id === draggedTaskId);
     if (sourceTask) {
       if (sourceTask.status !== targetStatus) {
-        setTasks(prev => prev.map(t => 
-          t.id === draggedTaskId 
-            ? { ...t, status: targetStatus, updatedAt: new Date().toISOString() } 
-            : t
-        ));
-        toast.success(`Task status updated to "${targetStatus}"`);
+        handleUpdateTaskStatus(draggedTaskId, targetStatus);
       }
     }
 
     setDraggedTaskId(null);
     setDraggedOverTaskId(null);
     setDraggedOverColumnId(null);
-  };
-  
-  // Timer State
-  const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
-  const [elapsedTimes, setElapsedTimes] = useState<Record<string, number>>({});
-  
-  // Track timers in real-time
-  React.useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (activeTimerTaskId) {
-      interval = setInterval(() => {
-        setElapsedTimes(prev => ({
-          ...prev,
-          [activeTimerTaskId]: (prev[activeTimerTaskId] || 0) + 1
-        }));
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [activeTimerTaskId]);
-
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const toggleTimer = (taskId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (activeTimerTaskId === taskId) {
-      setActiveTimerTaskId(null);
-    } else {
-      setActiveTimerTaskId(taskId);
-      // Automatically set task to "In Progress" if it wasn't
-      setTasks(prev => prev.map(t => 
-        t.id === taskId && t.status === TaskStatus.OPEN 
-          ? { ...t, status: TaskStatus.IN_PROGRESS } 
-          : t
-      ));
-    }
   };
   
   // Task Creation State
@@ -251,8 +226,97 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
     timeEstimate: 0
   });
 
+  const [enableWorkflow, setEnableWorkflow] = useState(false);
+  const [workflowTemplate, setWorkflowTemplate] = useState<string>('none');
+  const [customWorkflowSteps, setCustomWorkflowSteps] = useState<Array<{ name: string; assigneeId: string }>>([
+    { name: '🎨 Page Design Layout', assigneeId: '' },
+    { name: '💻 Web Implementation & Code', assigneeId: '' }
+  ]);
+
+  const handleTemplateChange = (template: string) => {
+    setWorkflowTemplate(template);
+    if (template === 'none') {
+      return;
+    }
+    
+    // Auto-map roles based on staff roles
+    const getAssigneeByRole = (roles: UserRole[]) => {
+      const found = users.find(u => roles.includes(u.role) && u.role !== UserRole.CLIENT);
+      return found ? found.id : (users.find(u => u.role !== UserRole.CLIENT)?.id || '');
+    };
+
+    const designerId = getAssigneeByRole([UserRole.DESIGNER, UserRole.DESIGN_LEAD]);
+    const developerId = getAssigneeByRole([UserRole.WEB_DEVELOPER, UserRole.WEB_DEVELOPER]);
+    const seoId = getAssigneeByRole([UserRole.SEO_SPECIALIST]);
+    const writerId = getAssigneeByRole([UserRole.CONTENT_WRITER, UserRole.CONTENT_LEAD]);
+    
+    if (template === 'design_dev') {
+      setCustomWorkflowSteps([
+        { name: '🎨 Visual Page Design', assigneeId: designerId },
+        { name: '💻 Web Dev Frontend Code', assigneeId: developerId }
+      ]);
+    } else if (template === 'seo_dev') {
+      setCustomWorkflowSteps([
+        { name: '🔍 Detailed SEO Sheet & Audit', assigneeId: seoId },
+        { name: '🛠️ Web Technical Implementation', assigneeId: developerId }
+      ]);
+    } else if (template === 'copy_design_dev') {
+      setCustomWorkflowSteps([
+        { name: '✍️ Copywriting Content Draft', assigneeId: writerId },
+        { name: '🎨 Asset Graphics & Artwork', assigneeId: designerId },
+        { name: '💻 Launch Development Coding', assigneeId: developerId }
+      ]);
+    }
+  };
+
+  const addWorkflowStepInput = () => {
+    setCustomWorkflowSteps([...customWorkflowSteps, { name: 'Next Pipeline Phase', assigneeId: '' }]);
+  };
+
+  const removeWorkflowStepInput = (index: number) => {
+    setCustomWorkflowSteps(customWorkflowSteps.filter((_, idx) => idx !== index));
+  };
+
+  const updateWorkflowStepInputName = (index: number, name: string) => {
+    setCustomWorkflowSteps(prev => prev.map((s, idx) => idx === index ? { ...s, name } : s));
+  };
+
+  const updateWorkflowStepInputAssignee = (index: number, assigneeId: string) => {
+    setCustomWorkflowSteps(prev => prev.map((s, idx) => idx === index ? { ...s, assigneeId } : s));
+  };
+
   const handleCreateTask = () => {
-    if (!newTask.name || !newTask.projectId || !newTask.assigneeId) return;
+    if (!newTask.name || !newTask.projectId) {
+      toast.error("Please enter a task name and select a project");
+      return;
+    }
+
+    let assigneeId = newTask.assigneeId || '';
+    let steps: TaskWorkflowStep[] = [];
+
+    if (enableWorkflow && customWorkflowSteps.length > 0) {
+      // Validate steps assignees
+      const missingAssignee = customWorkflowSteps.some(s => !s.assigneeId);
+      if (missingAssignee) {
+        toast.error("Please assign a person to all workflow steps");
+        return;
+      }
+
+      steps = customWorkflowSteps.map((s, idx) => ({
+        id: 'ws' + Math.random().toString(36).substr(2, 9),
+        name: s.name || `Stage ${idx + 1}`,
+        assigneeId: s.assigneeId,
+        isCompleted: false
+      }));
+
+      // The primary assignee initially is step 0's assignee
+      assigneeId = steps[0].assigneeId;
+    }
+
+    if (!assigneeId) {
+      toast.error("Please specify an assignee or set up the workflow pipeline");
+      return;
+    }
 
     const taskToAdd: Task = {
       ...newTask as Task,
@@ -260,14 +324,52 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
       deliverableId: 'custom-' + Date.now(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      subTasks: []
+      assigneeId,
+      subTasks: [],
+      workflowSteps: enableWorkflow ? steps : undefined,
+      currentStepIndex: enableWorkflow ? 0 : undefined,
+      isRecurring: newTask.isRecurring || false,
+      recurrenceInterval: newTask.recurrenceInterval || 1,
+      recurrenceTimes: newTask.recurrenceTimes || 1,
+      recurrencePeriod: newTask.recurrencePeriod || 'week',
+      recurrenceProgress: 1
     };
 
-    setTasks([taskToAdd, ...tasks]);
+    const generatedRecurrenceTasks: Task[] = [];
+    if (newTask.isRecurring && newTask.recurrenceTimes && newTask.recurrenceTimes > 1) {
+      const times = newTask.recurrenceTimes;
+      const period = newTask.recurrencePeriod || 'week';
+      
+      for (let i = 2; i <= times; i++) {
+        let duedateObj = new Date(taskToAdd.dueDate);
+        if (period === 'week') {
+          const daysToAdd = Math.round((i - 1) * (7 / (times - 1 || 1)));
+          duedateObj.setDate(duedateObj.getDate() + (isNaN(daysToAdd) ? 1 : daysToAdd));
+        } else {
+          const daysToAdd = Math.round((i - 1) * (30 / (times - 1 || 1)));
+          duedateObj.setDate(duedateObj.getDate() + (isNaN(daysToAdd) ? 1 : daysToAdd));
+        }
+        
+        generatedRecurrenceTasks.push({
+          ...taskToAdd,
+          id: 't' + Math.random().toString(36).substr(2, 9),
+          name: `${taskToAdd.name} (Recurring #${i})`,
+          dueDate: duedateObj.toISOString().split('T')[0],
+          isRecurring: true,
+          recurrenceProgress: i
+        });
+      }
+    }
 
-    // Send email notification if creator is an admin/manager and assignee is different
+    if (generatedRecurrenceTasks.length > 0) {
+      setTasks([taskToAdd, ...generatedRecurrenceTasks, ...tasks]);
+      toast.success(`Active schedule registered! Spawned ${generatedRecurrenceTasks.length + 1} recurring tasks.`);
+    } else {
+      setTasks([taskToAdd, ...tasks]);
+    }
+
+    // Send email notification for first assignee if different from creator
     const isLeadOrAdmin = user && ADMIN_ROLES.includes(user.role);
-
     if (isLeadOrAdmin && taskToAdd.assigneeId !== user?.id) {
       const assignee = users.find(u => u.id === taskToAdd.assigneeId);
       if (assignee && user) {
@@ -276,6 +378,8 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
     }
 
     setIsCreateDialogOpen(false);
+    
+    // Reset inputs
     setNewTask({
       name: '',
       projectId: filterProjectId || '',
@@ -285,8 +389,18 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
       dueDate: new Date().toISOString().split('T')[0],
       assigneeId: user?.id || '',
       description: '',
-      timeEstimate: 0
+      timeEstimate: 0,
+      isRecurring: false,
+      recurrenceInterval: 1,
+      recurrenceTimes: 1,
+      recurrencePeriod: 'week'
     });
+    setEnableWorkflow(false);
+    setWorkflowTemplate('none');
+    setCustomWorkflowSteps([
+      { name: '🎨 Page Design Layout', assigneeId: '' },
+      { name: '💻 Web Implementation & Code', assigneeId: '' }
+    ]);
   };
 
   const handleSuggestAssignee = async () => {
@@ -396,6 +510,148 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
 
   const handleDeleteTask = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  const completeWorkflowStep = (taskId: string, stepId: string) => {
+    setTasks(prevTasks => {
+      return prevTasks.map(task => {
+        if (task.id !== taskId || !task.workflowSteps) return task;
+
+        const updatedSteps = task.workflowSteps.map(step => {
+          if (step.id === stepId) {
+            return { ...step, isCompleted: true, completedAt: new Date().toISOString() };
+          }
+          return step;
+        });
+
+        const currentIndex = task.currentStepIndex ?? 0;
+        const nextIndex = currentIndex + 1;
+        
+        let newAssigneeId = task.assigneeId;
+        let newStatus = task.status;
+        let newCurrentStepIndex = currentIndex;
+
+        const completedStep = task.workflowSteps[currentIndex];
+
+        if (nextIndex < updatedSteps.length) {
+          // Reassign to the next step's assignee!
+          newAssigneeId = updatedSteps[nextIndex].assigneeId;
+          newCurrentStepIndex = nextIndex;
+          newStatus = TaskStatus.OPEN; // Reset status for the next team member to start
+
+          // Trigger handoff notification
+          const previousAssigneeProfile = users.find(u => u.id === completedStep.assigneeId);
+          const nextAssigneeProfile = users.find(u => u.id === newAssigneeId);
+          if (nextAssigneeProfile && previousAssigneeProfile) {
+            emailService.sendWorkflowHandoffEmail(
+              nextAssigneeProfile,
+              task,
+              previousAssigneeProfile,
+              completedStep.name
+            );
+          }
+        } else {
+          // All steps completed! Final task completion!
+          newStatus = TaskStatus.DONE;
+          toast.success(`All workflow stages for "${task.name}" are complete! 🎉`);
+        }
+
+        return {
+          ...task,
+          workflowSteps: updatedSteps,
+          currentStepIndex: newCurrentStepIndex,
+          assigneeId: newAssigneeId,
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        };
+      });
+    });
+  };
+
+  const resetWorkflowStep = (taskId: string, stepId: string) => {
+    setTasks(prevTasks => {
+      return prevTasks.map(task => {
+        if (task.id !== taskId || !task.workflowSteps) return task;
+
+        const targetStepIndex = task.workflowSteps.findIndex(s => s.id === stepId);
+        if (targetStepIndex === -1) return task;
+
+        const updatedSteps = task.workflowSteps.map((step, idx) => {
+          if (idx >= targetStepIndex) {
+            return { ...step, isCompleted: false, completedAt: undefined };
+          }
+          return step;
+        });
+
+        const newAssigneeId = updatedSteps[targetStepIndex].assigneeId;
+
+        return {
+          ...task,
+          workflowSteps: updatedSteps,
+          currentStepIndex: targetStepIndex,
+          assigneeId: newAssigneeId,
+          status: TaskStatus.REVISION_REQUESTED,
+          updatedAt: new Date().toISOString()
+        };
+      });
+    });
+  };
+
+  const handleUpdateTaskStatus = (taskId: string, targetStatus: TaskStatus) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+      if (t.status === targetStatus) return t;
+
+      // Check if task has workflow steps and user is completing the phase
+      if (t.workflowSteps && t.workflowSteps.length > 0 && (targetStatus === TaskStatus.DONE || targetStatus === TaskStatus.APPROVED)) {
+        const currentIndex = t.currentStepIndex ?? 0;
+        
+        if (currentIndex < t.workflowSteps.length) {
+          const currentStep = t.workflowSteps[currentIndex];
+          const nextIndex = currentIndex + 1;
+          const updatedSteps = t.workflowSteps.map((step, idx) => 
+            idx === currentIndex ? { ...step, isCompleted: true, completedAt: new Date().toISOString() } : step
+          );
+
+          if (nextIndex < updatedSteps.length) {
+            // Reassign to next step assignee and keep task open!
+            const newAssigneeId = updatedSteps[nextIndex].assigneeId;
+            const previousAssigneeProfile = users.find(u => u.id === currentStep.assigneeId);
+            const nextAssigneeProfile = users.find(u => u.id === newAssigneeId);
+
+            if (nextAssigneeProfile && previousAssigneeProfile) {
+              emailService.sendWorkflowHandoffEmail(
+                nextAssigneeProfile,
+                t,
+                previousAssigneeProfile,
+                currentStep.name
+              );
+            }
+
+            return {
+              ...t,
+              status: TaskStatus.OPEN, // Return to Open for the next developer
+              assigneeId: newAssigneeId,
+              currentStepIndex: nextIndex,
+              workflowSteps: updatedSteps,
+              updatedAt: new Date().toISOString()
+            };
+          } else {
+            // All steps finished!
+            toast.success(`All workflow stages for "${t.name}" are complete! 🎉`);
+            return {
+              ...t,
+              status: TaskStatus.DONE,
+              workflowSteps: updatedSteps,
+              updatedAt: new Date().toISOString()
+            };
+          }
+        }
+      }
+
+      // Default status update if no workflow active or not finalizing
+      return { ...t, status: targetStatus, updatedAt: new Date().toISOString() };
+    }));
   };
 
   const selectedProject = filterProjectId ? projects.find(p => p.id === filterProjectId) : null;
@@ -517,7 +773,7 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                 </Button>
               }
             />
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold tracking-tight">Create New Task</DialogTitle>
             </DialogHeader>
@@ -603,55 +859,59 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Assignee</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 text-[9px] font-bold uppercase tracking-widest text-orange-500 hover:text-orange-600 hover:bg-orange-50 px-2"
-                    onClick={handleSuggestAssignee}
-                    disabled={isSuggesting}
+              
+              {!enableWorkflow && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Assignee</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-[9px] font-bold uppercase tracking-widest text-orange-500 hover:text-orange-600 hover:bg-orange-50 px-2"
+                      onClick={handleSuggestAssignee}
+                      disabled={isSuggesting}
+                    >
+                      <Activity className={cn("w-3 h-3 mr-1", isSuggesting && "animate-pulse")} />
+                      {isSuggesting ? "Analyzing..." : "Suggest Expert"}
+                    </Button>
+                  </div>
+                  <Select 
+                    value={newTask.assigneeId} 
+                    onValueChange={(v) => {
+                      setNewTask({...newTask, assigneeId: v});
+                      setSuggestionReason(null);
+                    }}
                   >
-                    <Activity className={cn("w-3 h-3 mr-1", isSuggesting && "animate-pulse")} />
-                    {isSuggesting ? "Analyzing..." : "Suggest Expert"}
-                  </Button>
+                    <SelectTrigger className="rounded-xl border-zinc-200">
+                      <SelectValue placeholder="Select Expert" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {suggestionReason && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-[10px] text-orange-600 bg-orange-50/50 p-2 rounded-lg border border-orange-100/50 mt-1 flex items-start space-x-2"
+                    >
+                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>AI Logic: {suggestionReason}</span>
+                    </motion.div>
+                  )}
                 </div>
-                <Select 
-                  value={newTask.assigneeId} 
-                  onValueChange={(v) => {
-                    setNewTask({...newTask, assigneeId: v});
-                    setSuggestionReason(null);
-                  }}
-                >
-                  <SelectTrigger className="rounded-xl border-zinc-200">
-                    <SelectValue placeholder="Select Expert" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                {suggestionReason && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-[10px] text-orange-600 bg-orange-50/50 p-2 rounded-lg border border-orange-100/50 mt-1 flex items-start space-x-2"
-                  >
-                    <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
-                    <span>AI Logic: {suggestionReason}</span>
-                  </motion.div>
-                )}
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 animate-fade-in">
                 <div className="grid gap-2">
                   <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Status</Label>
                   <Select 
                     value={newTask.status} 
                     onValueChange={(v) => setNewTask({...newTask, status: v as TaskStatus})}
+                    disabled={enableWorkflow}
                   >
                     <SelectTrigger className="rounded-xl border-zinc-200">
                       <SelectValue placeholder="Status" />
@@ -679,11 +939,161 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                   </div>
                 </div>
               </div>
+
+              {/* Recurring Task Period Setup Panel */}
+              <div className="bg-zinc-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-zinc-150 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-900 dark:text-zinc-100 flex items-center">
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 text-orange-550" />
+                      Recurring Task Automation
+                    </Label>
+                    <p className="text-[10px] text-zinc-500 font-medium">Auto-creates duplicate tasks spaced evenly over week/month.</p>
+                  </div>
+                  <Checkbox 
+                    id="isRecurringCheckbox"
+                    checked={newTask.isRecurring || false} 
+                    onCheckedChange={(checked) => setNewTask({...newTask, isRecurring: !!checked, recurrenceTimes: checked ? 3 : 1})}
+                    className="brand-checkbox border-zinc-350"
+                  />
+                </div>
+
+                {newTask.isRecurring && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="grid grid-cols-2 gap-4 pt-3 border-t border-zinc-200/50"
+                  >
+                    <div className="grid gap-1.5">
+                      <Label className="text-[9px] uppercase font-extrabold tracking-wider text-zinc-400">Frequency Period</Label>
+                      <Select 
+                        value={newTask.recurrencePeriod || 'week'} 
+                        onValueChange={(v) => setNewTask({...newTask, recurrencePeriod: v as 'week' | 'month'})}
+                      >
+                        <SelectTrigger className="rounded-xl border-zinc-200 h-9 text-xs bg-white dark:bg-zinc-950">
+                          <SelectValue placeholder="Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="week">Weekly Recurring</SelectItem>
+                          <SelectItem value="month">Monthly Recurring</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label className="text-[9px] uppercase font-extrabold tracking-wider text-zinc-400">Times Per Period</Label>
+                      <Input 
+                        type="number"
+                        min="2"
+                        max="24"
+                        className="rounded-xl border-zinc-200 h-9 text-xs bg-white dark:bg-zinc-950"
+                        value={newTask.recurrenceTimes || 3}
+                        onChange={(e) => setNewTask({...newTask, recurrenceTimes: parseInt(e.target.value) || 2})}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Advanced multi-stage visual sequencing panel */}
+              <div className="border-t border-zinc-150 dark:border-zinc-800 pt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <Label className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Enable Multi-Person Workflow Pipeline</Label>
+                    <span className="text-[10px] text-zinc-455 dark:text-zinc-500 font-medium leading-tight mt-1">Automatically hands off task sequentially across multiple assignees upon phase completion</span>
+                  </div>
+                  <Checkbox 
+                    checked={enableWorkflow} 
+                    onCheckedChange={(checked) => setEnableWorkflow(!!checked)}
+                    className="brand-checkbox"
+                  />
+                </div>
+
+                {enableWorkflow && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-4 pt-1"
+                  >
+                    <div className="grid gap-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Workflow Template Preset</Label>
+                      <Select value={workflowTemplate} onValueChange={handleTemplateChange}>
+                        <SelectTrigger className="rounded-xl border-zinc-200">
+                          <SelectValue placeholder="Custom (Unpresetted)" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="none">Custom Setup (No Preset)</SelectItem>
+                          <SelectItem value="design_dev">🎨 Design Handoff to Web Dev</SelectItem>
+                          <SelectItem value="seo_dev">🔍 SEO Sheet Handoff to Tech Dev</SelectItem>
+                          <SelectItem value="copy_design_dev">✍️ Copywriting ➜ Art ➜ Web CMS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Pipeline Progression Phases</Label>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-[9px] font-extrabold uppercase text-brand-secondary hover:underline p-0 cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            addWorkflowStepInput();
+                          }}
+                        >
+                          + Add Progression Step
+                        </Button>
+                      </div>
+
+                      <div className="space-y-2 max-h-[190px] overflow-y-auto pr-1 scrollbar-thin">
+                        {customWorkflowSteps.map((step, idx) => (
+                          <div key={idx} className="flex items-center gap-2 bg-zinc-55/40 dark:bg-zinc-900/40 p-2.5 rounded-xl border border-zinc-200/50 dark:border-zinc-850 relative group">
+                            <span className="text-xs font-black text-zinc-400 w-4">{idx + 1}</span>
+                            <div className="flex-1 grid grid-cols-2 gap-2">
+                              <Input 
+                                placeholder="Stage Name..." 
+                                className="h-8 rounded-lg text-[11px] font-bold"
+                                value={step.name}
+                                onChange={(e) => updateWorkflowStepInputName(idx, e.target.value)}
+                              />
+                              <Select 
+                                value={step.assigneeId} 
+                                onValueChange={(val) => updateWorkflowStepInputAssignee(idx, val)}
+                              >
+                                <SelectTrigger className="h-8 rounded-lg text-[11px] font-semibold">
+                                  <SelectValue placeholder="Assign To" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[160px]">
+                                  {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
+                                    <SelectItem key={u.id} value={u.id} className="text-xs">{u.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="w-6 h-6 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-zinc-100 opacity-60 group-hover:opacity-100 transition-colors shrink-0"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                removeWorkflowStepInput(idx);
+                              }}
+                              disabled={customWorkflowSteps.length <= 1}
+                            >
+                              ✕
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
             </div>
             <DialogFooter className="pt-4 border-t">
               <Button 
                 onClick={handleCreateTask}
-                className="w-full bg-zinc-900 text-white rounded-xl h-12 font-bold uppercase tracking-widest text-xs"
+                className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 rounded-xl h-12 font-bold uppercase tracking-widest text-xs cursor-pointer shadow-md"
               >
                 Create Task
               </Button>
@@ -772,9 +1182,11 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                         <SelectTrigger className="h-8 border-none shadow-none focus:ring-0 p-0 hover:bg-zinc-100 rounded-lg pr-2">
                           <div className="flex items-center space-x-2">
                             <Avatar className="w-6 h-6 border shadow-sm">
-                              <AvatarFallback className="text-[10px] font-bold bg-zinc-100">{assignee?.name.charAt(0)}</AvatarFallback>
+                              <AvatarFallback className="text-[10px] font-bold bg-zinc-100">
+                                {assignee?.name ? assignee.name.charAt(0) : '?'}
+                              </AvatarFallback>
                             </Avatar>
-                            <span className="text-xs font-semibold">{assignee?.name}</span>
+                            <span className="text-xs font-semibold">{assignee?.name || 'Unassigned'}</span>
                           </div>
                         </SelectTrigger>
                         <SelectContent>
@@ -795,7 +1207,7 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                       <Select 
                         value={task.status} 
                         onValueChange={(newStatus) => {
-                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus as TaskStatus } : t));
+                          handleUpdateTaskStatus(task.id, newStatus as TaskStatus);
                         }}
                       >
                         <SelectTrigger className={cn(
@@ -959,6 +1371,170 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                                   <p className="text-[10px] text-zinc-400 font-medium italic">Press Enter to add</p>
                                 </div>
                               </div>
+
+                              {/* Automated Handoff Pipeline Progression Stepper */}
+                              {task.workflowSteps && task.workflowSteps.length > 0 && (
+                                <div className="p-5 bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/50 dark:border-zinc-800 rounded-2xl space-y-3.5 mt-4 shadow-sm">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                                        Workflow Pipeline Handoff
+                                      </span>
+                                      <Badge variant="outline" className="text-[9px] font-extrabold bg-brand-secondary/5 text-brand-secondary border-brand-secondary/20 dark:border-brand-secondary/30 rounded-md">
+                                        STAGE { (task.currentStepIndex ?? 0) + 1 } of { task.workflowSteps.length }
+                                      </Badge>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-400 dark:text-zinc-600 font-extrabold uppercase tracking-widest">
+                                      {task.workflowSteps[task.currentStepIndex ?? 0].isCompleted ? "✓ Finished" : "➔ Sequential Route"}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-1">
+                                    <div className="flex flex-1 items-center space-x-2 overflow-x-auto pb-2 md:pb-0 scrollbar-none">
+                                      {task.workflowSteps.map((step, idx) => {
+                                        const isCompleted = step.isCompleted;
+                                        const isActive = idx === (task.currentStepIndex ?? 0);
+                                        const stepAssignee = users.find(u => u.id === step.assigneeId);
+
+                                        return (
+                                          <React.Fragment key={step.id}>
+                                            {idx > 0 && (
+                                              <div className={cn(
+                                                "h-0.5 w-6 shrink-0 transition-colors hidden md:block",
+                                                isCompleted ? "bg-brand-secondary" : "bg-zinc-200 dark:bg-zinc-800"
+                                              )} />
+                                            )}
+                                            <div className={cn(
+                                              "flex items-center space-x-2.5 p-2 rounded-xl border transition-all shrink-0 min-w-[170px]",
+                                              isActive 
+                                                ? "bg-brand-secondary/5 dark:bg-brand-secondary/10 border-brand-secondary/30 ring-1 ring-brand-secondary/5 shadow-sm" 
+                                                : isCompleted 
+                                                  ? "bg-zinc-100/30 dark:bg-zinc-900/30 border-zinc-200/50 dark:border-zinc-800/50 opacity-80"
+                                                  : "bg-white dark:bg-zinc-950/40 border-zinc-100 dark:border-zinc-900 opacity-50"
+                                            )}>
+                                              <div className={cn(
+                                                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
+                                                isCompleted 
+                                                  ? "bg-emerald-500 text-white" 
+                                                  : isActive 
+                                                    ? "bg-brand-secondary text-white animate-pulse" 
+                                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500"
+                                              )}>
+                                                {isCompleted ? "✓" : idx + 1}
+                                              </div>
+                                              <div className="flex flex-col truncate">
+                                                <span className={cn(
+                                                  "text-xs font-bold truncate tracking-tight text-zinc-800 dark:text-zinc-200",
+                                                  isCompleted && "line-through text-zinc-400 dark:text-zinc-650"
+                                                )}>
+                                                  {step.name}
+                                                </span>
+                                                <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 truncate">
+                                                  {stepAssignee?.name || 'Unassigned'}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* Next Step complete trigger CTA */}
+                                    {((task.currentStepIndex ?? 0) < task.workflowSteps.length) && (
+                                      <Button
+                                        size="sm"
+                                        className="bg-brand-secondary hover:bg-brand-secondary/95 text-white font-bold text-[9px] uppercase tracking-wider h-8 rounded-xl shrink-0 cursor-pointer shadow-sm transition-all shadow-brand-secondary/10"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          completeWorkflowStep(task.id, task.workflowSteps![task.currentStepIndex ?? 0].id);
+                                        }}
+                                      >
+                                        🚀 Complete Step & Hand off
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Time Log / Estimation Panel */}
+                              <div className="p-4 bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/50 dark:border-zinc-800 rounded-2xl space-y-3 mt-4 shadow-sm">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center space-x-2">
+                                    <Clock className="w-3.5 h-3.5 text-brand-secondary" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                                      Time tracker & Manual Log
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                                    Total Logged: {formatTime(elapsedTimes[task.id] || 0)}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Hours</label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      placeholder="0"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                                      value={Math.floor((elapsedTimes[task.id] || 0) / 3600) || ''}
+                                      onChange={(e) => {
+                                        const hours = Math.max(0, parseInt(e.target.value) || 0);
+                                        const currentSecs = elapsedTimes[task.id] || 0;
+                                        const mins = Math.floor((currentSecs % 3600) / 60);
+                                        const secs = currentSecs % 60;
+                                        const newTotal = (hours * 3600) + (mins * 60) + secs;
+                                        
+                                        setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Minutes</label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="59"
+                                      placeholder="0"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                                      value={Math.floor(((elapsedTimes[task.id] || 0) % 3600) / 60) || ''}
+                                      onChange={(e) => {
+                                        const mins = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
+                                        const currentSecs = elapsedTimes[task.id] || 0;
+                                        const hours = Math.floor(currentSecs / 3600);
+                                        const secs = currentSecs % 60;
+                                        const newTotal = (hours * 3600) + (mins * 60) + secs;
+
+                                        setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Seconds</label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="59"
+                                      placeholder="0"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-850"
+                                      value={((elapsedTimes[task.id] || 0) % 60) || ''}
+                                      onChange={(e) => {
+                                        const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
+                                        const currentSecs = elapsedTimes[task.id] || 0;
+                                        const hours = Math.floor(currentSecs / 3600);
+                                        const mins = Math.floor((currentSecs % 3600) / 60);
+                                        const newTotal = (hours * 3600) + (mins * 60) + secs;
+
+                                        setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </motion.div>
                         </TableCell>
@@ -1060,6 +1636,19 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                             </div>
                           </div>
 
+                          {/* Pipeline Badge on card when not expanded */}
+                          {task.workflowSteps && task.workflowSteps.length > 0 && (
+                            <div className="mt-3 p-1.5 bg-zinc-55/60 dark:bg-zinc-90 w/40 rounded-xl border border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between text-[10px] font-semibold text-zinc-550 dark:text-zinc-400 cursor-pointer" onClick={() => toggleExpand(task.id)}>
+                              <span className="truncate max-w-[170px] flex items-center gap-1.5">
+                                <span className="text-[8px] uppercase font-black text-brand-secondary shrink-0 tracking-wider">🔄 Active:</span>
+                                <span className="text-zinc-700 dark:text-zinc-300 font-extrabold truncate">{task.workflowSteps[task.currentStepIndex ?? 0].name}</span>
+                              </span>
+                              <span className="shrink-0 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-305 font-mono text-[9px] px-1.5 rounded-full">
+                                {(task.currentStepIndex ?? 0) + 1}/{task.workflowSteps.length}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Progress bar inside card if subtasks exist */}
                           {subtaskCount > 0 && (
                             <div className="mt-4 space-y-1 cursor-pointer" onClick={() => toggleExpand(task.id)}>
@@ -1128,6 +1717,147 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                                       <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-450" />
                                     </div>
                                   </div>
+
+                                  {/* Compact Pipeline Progression Stepper for Card Drawer Layout */}
+                                  {task.workflowSteps && task.workflowSteps.length > 0 && (
+                                    <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800 rounded-xl space-y-3.5 mt-3 shadow-sm">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450 dark:text-zinc-500">Pipeline Route</span>
+                                        <Badge variant="outline" className="text-[8px] font-extrabold bg-brand-secondary/5 text-brand-secondary border-brand-secondary/20 dark:border-brand-secondary/30 rounded-md py-0 px-1.5 h-4">
+                                          STEP { (task.currentStepIndex ?? 0) + 1 } / { task.workflowSteps.length }
+                                        </Badge>
+                                      </div>
+                                      <div className="relative pl-1 space-y-3">
+                                        {/* Left connecting timeline vertical bar */}
+                                        <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-zinc-200 dark:bg-zinc-850" />
+                                        {task.workflowSteps.map((step, idx) => {
+                                          const isCompleted = step.isCompleted;
+                                          const isActive = idx === (task.currentStepIndex ?? 0);
+                                          const stepAssignee = users.find(u => u.id === step.assigneeId);
+
+                                          return (
+                                            <div key={step.id} className={cn(
+                                              "flex items-center justify-between pl-0.5 relative z-10 transition-all",
+                                              isActive ? "scale-[1.01] bg-brand-secondary/[0.03] p-1 rounded-lg border border-brand-secondary/15" : "opacity-80"
+                                            )}>
+                                              <div className="flex items-center space-x-2.5 min-w-0">
+                                                <div className={cn(
+                                                  "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-extrabold border shrink-0 transition-all",
+                                                  isCompleted 
+                                                    ? "bg-emerald-500 border-emerald-500 text-white shadow-sm" 
+                                                    : isActive 
+                                                      ? "bg-brand-secondary border-brand-secondary text-white animate-pulse" 
+                                                      : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500"
+                                                )}>
+                                                  {isCompleted ? "✓" : idx + 1}
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                  <span className={cn(
+                                                    "text-[11px] font-bold truncate tracking-tight text-zinc-800 dark:text-zinc-200",
+                                                    isCompleted && "line-through text-zinc-450 dark:text-zinc-650"
+                                                  )}>
+                                                    {step.name}
+                                                  </span>
+                                                  <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 truncate">
+                                                    {stepAssignee?.name || 'Unassigned'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+
+                                      {/* Trigger complete handoff action */}
+                                      {((task.currentStepIndex ?? 0) < task.workflowSteps.length) && (
+                                        <Button
+                                          size="sm"
+                                          className="w-full bg-brand-secondary hover:bg-brand-secondary/95 text-white font-bold text-[9px] uppercase tracking-wider py-1.5 h-8 rounded-xl shrink-0 cursor-pointer shadow-sm transition-all shadow-brand-secondary/5 mt-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            completeWorkflowStep(task.id, task.workflowSteps![task.currentStepIndex ?? 0].id);
+                                          }}
+                                        >
+                                          🚀 Complete Stage & Hand off
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Time Log / Estimation Panel */}
+                                  <div className="p-3 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800 rounded-xl space-y-3 mt-3 shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-450 dark:text-zinc-500">Time Settings</span>
+                                      <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-widest bg-zinc-150 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                                        Total: {formatTime(elapsedTimes[task.id] || 0)}
+                                      </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div className="space-y-1">
+                                        <label className="text-[8px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-widest">Hrs</label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-1.5 text-center"
+                                          value={Math.floor((elapsedTimes[task.id] || 0) / 3600) || ''}
+                                          onChange={(e) => {
+                                            const hours = Math.max(0, parseInt(e.target.value) || 0);
+                                            const currentSecs = elapsedTimes[task.id] || 0;
+                                            const mins = Math.floor((currentSecs % 3600) / 60);
+                                            const secs = currentSecs % 60;
+                                            const newTotal = (hours * 3600) + (mins * 60) + secs;
+                                            
+                                            setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[8px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-widest">Mins</label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="59"
+                                          placeholder="0"
+                                          className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-1.5 text-center"
+                                          value={Math.floor(((elapsedTimes[task.id] || 0) % 3600) / 60) || ''}
+                                          onChange={(e) => {
+                                            const mins = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
+                                            const currentSecs = elapsedTimes[task.id] || 0;
+                                            const hours = Math.floor(currentSecs / 3600);
+                                            const secs = currentSecs % 60;
+                                            const newTotal = (hours * 3600) + (mins * 60) + secs;
+
+                                            setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[8px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-widest">Secs</label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="59"
+                                          placeholder="0"
+                                          className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-1.5 text-center"
+                                          value={((elapsedTimes[task.id] || 0) % 60) || ''}
+                                          onChange={(e) => {
+                                            const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
+                                            const currentSecs = elapsedTimes[task.id] || 0;
+                                            const hours = Math.floor(currentSecs / 3600);
+                                            const mins = Math.floor((currentSecs % 3600) / 60);
+                                            const newTotal = (hours * 3600) + (mins * 60) + secs;
+
+                                            setElapsedTimes(prev => ({ ...prev, [task.id]: newTotal }));
+                                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: newTotal, timeLogged: parseFloat((newTotal / 3600).toFixed(4)) } : t));
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </motion.div>
                             )}
@@ -1145,9 +1875,13 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                               <SelectTrigger className="h-7 border-none shadow-none focus:ring-0 p-0 hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded-lg pr-1.5 shrink-0 max-w-[125px] overflow-hidden text-zinc-750 dark:text-zinc-300">
                                 <div className="flex items-center space-x-1.5 truncate">
                                   <Avatar className="w-5 h-5 border shadow-sm shrink-0">
-                                    <AvatarFallback className="text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">{assignee?.name.charAt(0)}</AvatarFallback>
+                                    <AvatarFallback className="text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                      {assignee?.name ? assignee.name.charAt(0) : '?'}
+                                    </AvatarFallback>
                                   </Avatar>
-                                  <span className="text-[11px] font-semibold truncate">{assignee?.name.split(' ')[0]}</span>
+                                  <span className="text-[11px] font-semibold truncate">
+                                    {assignee?.name ? assignee.name.split(' ')[0] : 'Unassigned'}
+                                  </span>
                                 </div>
                               </SelectTrigger>
                               <SelectContent>
@@ -1168,10 +1902,18 @@ export function TaskEngine({ filterProjectId, onClearFilter, tasks, setTasks, pr
                             <div className="flex items-center space-x-1.5 shrink-0">
                               <div className="flex items-center text-[10px] text-zinc-400 dark:text-zinc-500 font-medium whitespace-nowrap font-mono">
                                 <Clock className="w-3 h-3 mr-1 shrink-0" />
-                                <span>{task.dueDate.split('-').slice(1).join('/')}</span>
+                                <span>{task.dueDate ? task.dueDate.split('-').slice(1).join('/') : 'N/A'}</span>
                               </div>
 
                               {/* Play Timer Button */}
+                              {elapsedTimes[task.id] > 0 && (
+                                <span className={cn(
+                                  "font-mono text-[9px] px-1.5 py-0.5 rounded-md font-semibold tracking-tight shrink-0",
+                                  activeTimerTaskId === task.id ? "text-red-500 bg-red-500/10 dark:bg-red-500/20 animate-pulse" : "text-zinc-500 bg-zinc-100 dark:bg-zinc-800"
+                                )}>
+                                  {formatTime(elapsedTimes[task.id])}
+                                </span>
+                              )}
                               <Button 
                                 variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
                                 size="icon"

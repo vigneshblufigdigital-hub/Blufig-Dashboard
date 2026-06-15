@@ -24,5 +24,27 @@ export const emailService = {
 
     // 3. Return true to indicate success
     return true;
+  },
+
+  /**
+   * Simulates sending a workflow stage handoff email.
+   */
+  sendWorkflowHandoffEmail: async (assignee: UserProfile, task: Task, previousAssignee: UserProfile, stepName: string) => {
+    // 1. Log to console for developer visibility
+    console.log(`[EMAIL SYSTEM] Workflow Handoff...
+      To: ${assignee.email}
+      Subject: 🔄 Workflow Assigned: ${task.name}
+      Body: Hi ${assignee.name}, the preceding step "${stepName}" has been completed by ${previousAssignee.name}. It is now your turn!
+      Priority: ${task.priority}
+      Due: ${task.dueDate}
+    `);
+
+    // 2. Show a toast notification in the UI to confirm the "email" was sent
+    toast.success(`Pipeline reassigned to ${assignee.name}!`, {
+      description: `"${stepName}" complete. Handed off: ${assignee.email}`,
+      duration: 6000,
+    });
+
+    return true;
   }
 };

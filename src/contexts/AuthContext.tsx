@@ -4,8 +4,8 @@ import { MOCK_USERS } from '../mockData';
 import { toast } from 'sonner';
 
 interface AuthContextType {
-  user: AppUser;
-  setUser: (user: AppUser) => void;
+  user: AppUser | null;
+  setUser: (user: AppUser | null) => void;
   loading: boolean;
   logout: () => Promise<void>;
 }
@@ -13,12 +13,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser>(MOCK_USERS[0]);
+  const [user, setUser] = useState<AppUser | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('blufig_logged_user');
+      if (savedUser) {
+        return JSON.parse(savedUser) as AppUser;
+      }
+    } catch (e) {
+      console.warn('Could not parse saved user', e);
+    }
+    return null;
+  });
   const [loading] = useState(false);
 
   const logout = async () => {
-    // setUser(null); // Just keep user as is or reset to default
-    toast.info("Mock logout: User kept as default admin");
+    setUser(null);
+    localStorage.removeItem('blufig_logged_user');
+    toast.info("Logged out successfully");
   };
 
   return (

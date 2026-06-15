@@ -382,5 +382,19 @@ export const MOCK_TASKS: Task[] = [
     updatedAt: '2024-05-12',
     deliverableId: 'd4',
     subTasks: []
+  },
+  {
+    id: 't-demo-urgent',
+    projectId: 'p1',
+    deliverableId: 'd1',
+    name: 'Urgent Client Strategy Proposal Review',
+    type: 'Strategy',
+    assigneeId: '130',
+    status: TaskStatus.OPEN,
+    priority: Priority.CRITICAL,
+    dueDate: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().split('T')[0],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    subTasks: []
   }
 ];

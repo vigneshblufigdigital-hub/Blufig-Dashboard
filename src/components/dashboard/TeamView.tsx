@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { MOCK_USERS } from '@/src/mockData';
 import { Mail, Briefcase, Tag, Shield, ShieldAlert, CheckCircle2, XCircle, Plus, UserPlus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -35,7 +35,8 @@ export function TeamView() {
     role: UserRole.CONTENT_WRITER,
     department: Department.CONTENT,
     designation: '',
-    skillTags: []
+    skillTags: [],
+    avatarUrl: ''
   });
 
   const agencyUsers = users.filter(u => u.role !== UserRole.CLIENT);
@@ -45,6 +46,8 @@ export function TeamView() {
     const userToAdd: UserProfile = {
       ...newUser as UserProfile,
       id: Math.random().toString(36).substr(2, 9),
+      avatarUrl: newUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newUser.name}`,
+      designation: newUser.designation || (newUser.role === UserRole.CLIENT ? 'Client Partner' : 'Specialist'),
       skillTags: newUser.skillTags || []
     };
     setUsers([...users, userToAdd]);
@@ -55,7 +58,8 @@ export function TeamView() {
       role: UserRole.CONTENT_WRITER,
       department: Department.CONTENT,
       designation: '',
-      skillTags: []
+      skillTags: [],
+      avatarUrl: ''
     });
   };
 
@@ -88,14 +92,14 @@ export function TeamView() {
                   </Button>
                 }
               />
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[460px]">
                 <DialogHeader>
-                  <DialogTitle className="text-xl font-bold tracking-tight">Add Team Member</DialogTitle>
+                  <DialogTitle className="text-xl font-bold tracking-tight">Add User / Client Profile</DialogTitle>
                   <DialogDescription className="text-zinc-500">
-                    Invite a new user to the Blufig workspace.
+                    Invite a new teammate or external client partner to the Blufig workspace.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-6 py-4">
+                <div className="grid gap-5 py-4 max-h-[60vh] overflow-y-auto px-1">
                   <div className="grid gap-2">
                     <Label htmlFor="name" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Full Name</Label>
                     <Input 
@@ -137,7 +141,10 @@ export function TeamView() {
                       <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Role</Label>
                       <Select 
                         value={newUser.role} 
-                        onValueChange={(v) => setNewUser({...newUser, role: v as UserRole})}
+                        onValueChange={(v) => {
+                          const updatedDept = v === UserRole.CLIENT ? Department.MANAGEMENT : newUser.department;
+                          setNewUser({...newUser, role: v as UserRole, department: updatedDept});
+                        }}
                       >
                         <SelectTrigger className="rounded-xl border-zinc-200">
                           <SelectValue placeholder="Select" />
@@ -160,6 +167,50 @@ export function TeamView() {
                       onChange={(e) => setNewUser({...newUser, designation: e.target.value})}
                     />
                   </div>
+
+                  {/* Profile Photo Option (Emoji/Logo Selection Setup) */}
+                  <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-150 gap-4 flex flex-col">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Profile Photo / Logo</Label>
+                      {newUser.avatarUrl && (
+                        <span className="text-[10px] text-zinc-450 font-bold">Selected: {newUser.avatarUrl.length > 5 ? 'Custom Logo' : newUser.avatarUrl}</span>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border flex items-center justify-center text-2xl shadow-inner font-mono select-none">
+                        {newUser.avatarUrl && newUser.avatarUrl.length <= 4 ? newUser.avatarUrl : (newUser.avatarUrl ? '🖼️' : '👤')}
+                      </div>
+                      <div className="flex-1">
+                        <Input 
+                          placeholder="Paste Logo URL or Type Custom Emoji" 
+                          className="rounded-xl h-10 text-xs border-zinc-200 bg-white"
+                          value={newUser.avatarUrl}
+                          onChange={(e) => setNewUser({...newUser, avatarUrl: e.target.value})}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] uppercase font-extrabold tracking-widest text-zinc-400 block">Quick Emojis / Logo Presets</span>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-0.5 bg-white rounded bg-card border">
+                        {['💼', '🏢', '🚀', '🎨', '📊', '🌍', '🛡️', '💎', '💡', '⚡', '☕', '🎯', '🦁', '🦊', '🦉', '🍕', '🚗', '🏔️'].map((emoji) => (
+                          <button
+                            type="button"
+                            key={emoji}
+                            onClick={() => setNewUser({...newUser, avatarUrl: emoji})}
+                            className={cn(
+                              "w-7 h-7 flex items-center justify-center text-xs rounded bg-zinc-50 hover:bg-zinc-100 transition-all border",
+                              newUser.avatarUrl === emoji ? "border-zinc-900 bg-zinc-100" : "border-transparent"
+                            )}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
                 <DialogFooter className="pt-4 border-t">
                   <Button 
@@ -167,7 +218,7 @@ export function TeamView() {
                     className="w-full bg-zinc-900 text-white rounded-xl h-12 font-bold uppercase tracking-widest text-xs"
                     onClick={handleAddUser}
                   >
-                    Confirm Addition
+                    {newUser.role === UserRole.CLIENT ? 'Confirm Client Addition' : 'Confirm Teammate Addition'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -190,9 +241,18 @@ export function TeamView() {
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center text-center">
                     <Avatar className="w-20 h-20 border-2 border-white shadow-sm mb-4">
-                      <AvatarFallback className="text-xl font-bold bg-brand-secondary text-white">
-                        {user.name.charAt(0)}
-                      </AvatarFallback>
+                      {user.avatarUrl && !user.avatarUrl.startsWith('http') && !user.avatarUrl.startsWith('/') && user.avatarUrl.length <= 4 ? (
+                        <AvatarFallback className="text-3xl bg-orange-100 text-orange-655 flex items-center justify-center select-none font-bold">
+                          {user.avatarUrl}
+                        </AvatarFallback>
+                      ) : (
+                        <>
+                          <AvatarImage src={user.avatarUrl} referrerPolicy="no-referrer" />
+                          <AvatarFallback className="text-xl font-bold bg-brand-secondary text-white">
+                            {user.name.charAt(0)}
+                          </AvatarFallback>
+                        </>
+                      )}
                     </Avatar>
                     <h3 className="font-bold text-lg tracking-tight">{user.name}</h3>
                     <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-1">

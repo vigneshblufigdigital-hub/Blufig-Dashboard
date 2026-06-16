@@ -69,6 +69,10 @@ function Dashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  const [filterAssigneeId, setFilterAssigneeId] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterPriority, setFilterPriority] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectType, setNewProjectType] = useState('Retainer');
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
@@ -453,6 +457,12 @@ function Dashboard() {
           users={users}
           filterProjectId={selectedProjectId} 
           onClearFilter={() => setSelectedProjectId(null)} 
+          filterAssigneeId={filterAssigneeId}
+          onClearFilterAssignee={() => setFilterAssigneeId(null)}
+          filterStatus={filterStatus}
+          onClearFilterStatus={() => setFilterStatus(null)}
+          filterPriority={filterPriority}
+          onClearFilterPriority={() => setFilterPriority(null)}
           activeTimerTaskId={activeTimerTaskId}
           setActiveTimerTaskId={setActiveTimerTaskId}
           elapsedTimes={elapsedTimes}
@@ -461,7 +471,7 @@ function Dashboard() {
           toggleTimer={toggleTimer}
         />;
       case 'team':
-        return <TeamView />;
+        return <TeamView users={users} setUsers={setUsers} />;
       case 'profile':
         return (
           <UserProfileView 
@@ -927,7 +937,6 @@ function Dashboard() {
               className="flex items-center space-x-2 sm:space-x-3 shrink-0 group cursor-pointer" 
               onClick={() => {
                 setActiveTab('profile');
-                toast.success("Welcome to your Profile & Preferences workspace!");
               }}
               title="View & Edit Profile Preferences"
             >
@@ -978,9 +987,22 @@ function Dashboard() {
             
             {!isClient && (
               <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto justify-end">
-                <Button variant="outline" size="sm" className="h-10 border-border text-foreground bg-card hover:bg-muted">
+                <Button 
+                  onClick={() => setIsFilterDialogOpen(true)}
+                  variant="outline" 
+                  size="sm" 
+                  className={cn(
+                    "h-10 border-border text-foreground bg-card hover:bg-muted relative",
+                    (selectedProjectId || filterAssigneeId || filterStatus || filterPriority) ? "border-brand-secondary text-brand-secondary bg-brand-secondary/5 font-extrabold" : ""
+                  )}
+                >
                   <Filter className="w-4 h-4 mr-2" />
                   Filters
+                  {(selectedProjectId || filterAssigneeId || filterStatus || filterPriority) ? (
+                    <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 bg-brand-secondary text-white text-[9px] rounded-full flex items-center justify-center font-bold">
+                      !
+                    </span>
+                  ) : null}
                 </Button>
                 <Button 
                   size="sm" 
@@ -1149,6 +1171,117 @@ function Dashboard() {
                 Confirm & Activate Project
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Global Filter Dialog */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="sm:max-w-[420px] rounded-2xl bg-card border-border shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight text-foreground">Filter Workspace Tasks</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 font-sans text-left">
+            {/* Project Filter */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project</label>
+              <Select 
+                value={selectedProjectId || "all"} 
+                onValueChange={(val) => setSelectedProjectId(val === "all" ? null : val)}
+              >
+                <SelectTrigger className="w-full h-10 rounded-xl bg-muted/20 border-border text-foreground">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto bg-card border-border">
+                  <SelectItem value="all">📁 All Projects</SelectItem>
+                  {projects.map(p => (
+                    <SelectItem key={p.id} value={p.id}>📁 {p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Assignee Filter */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Assignee</label>
+              <Select 
+                value={filterAssigneeId || "all"} 
+                onValueChange={(val) => setFilterAssigneeId(val === "all" ? null : val)}
+              >
+                <SelectTrigger className="w-full h-10 rounded-xl bg-muted/20 border-border text-foreground">
+                  <SelectValue placeholder="All Assignees" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto bg-card border-border">
+                  <SelectItem value="all">👨‍💻 All Assignees</SelectItem>
+                  {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
+                    <SelectItem key={u.id} value={u.id}>👨‍💻 {u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Priority Filter */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Priority</label>
+              <Select 
+                value={filterPriority || "all"} 
+                onValueChange={(val) => setFilterPriority(val === "all" ? null : val)}
+              >
+                <SelectTrigger className="w-full h-10 rounded-xl bg-muted/20 border-border text-foreground">
+                  <SelectValue placeholder="All Priorities" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">⚡ All Priorities</SelectItem>
+                  {Object.values(Priority).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p === 'Critical' ? '💀' : p === 'High' ? '🔴' : p === 'Normal' ? '🟡' : '🟢'} {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Status Filter */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Task Status</label>
+              <Select 
+                value={filterStatus || "all"} 
+                onValueChange={(val) => setFilterStatus(val === "all" ? null : val)}
+              >
+                <SelectTrigger className="w-full h-10 rounded-xl bg-muted/20 border-border text-foreground">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">📈 All Statuses</SelectItem>
+                  {Object.values(TaskStatus).map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s === TaskStatus.DONE ? '✅ Done' : s === TaskStatus.CANCELLED ? '❌ Cancelled' : s === TaskStatus.BLOCKED ? '📥 Blocked' : '📋 ' + s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="flex items-center justify-between sm:justify-between border-t pt-4">
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setSelectedProjectId(null);
+                setFilterAssigneeId(null);
+                setFilterPriority(null);
+                setFilterStatus(null);
+                toast.success("All filters cleared successfully!");
+              }}
+              className="text-xs font-bold text-zinc-400 hover:text-red-500 hover:bg-red-50/10 cursor-pointer h-10 rounded-xl"
+            >
+              Reset All
+            </Button>
+            <Button 
+              onClick={() => setIsFilterDialogOpen(false)}
+              className="bg-brand-secondary hover:bg-brand-secondary/90 text-white font-bold text-xs uppercase tracking-wider rounded-xl h-10 px-6 cursor-pointer"
+            >
+              Apply Filters
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

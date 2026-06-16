@@ -27,7 +27,8 @@ import {
   Activity,
   LayoutGrid,
   List,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -54,7 +55,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { suggestAssignee } from '../../lib/gemini';
+import { suggestAssignee, suggestTaskDetails } from '../../lib/gemini';
 import { toast } from 'sonner';
 
 import { emailService } from '@/src/services/emailService';
@@ -62,6 +63,12 @@ import { emailService } from '@/src/services/emailService';
 interface TaskEngineProps {
   filterProjectId?: string | null;
   onClearFilter?: () => void;
+  filterAssigneeId?: string | null;
+  onClearFilterAssignee?: () => void;
+  filterStatus?: string | null;
+  onClearFilterStatus?: () => void;
+  filterPriority?: string | null;
+  onClearFilterPriority?: () => void;
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   projects: Project[];
@@ -77,6 +84,12 @@ interface TaskEngineProps {
 export function TaskEngine({ 
   filterProjectId, 
   onClearFilter, 
+  filterAssigneeId,
+  onClearFilterAssignee,
+  filterStatus,
+  onClearFilterStatus,
+  filterPriority,
+  onClearFilterPriority,
   tasks, 
   setTasks, 
   projects, 
@@ -213,6 +226,8 @@ export function TaskEngine({
   // Task Creation State
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(null);
   const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
   const [newTask, setNewTask] = useState<Partial<Task>>({
     name: '',
@@ -318,6 +333,10 @@ export function TaskEngine({
       return;
     }
 
+    const baseDueDate = newTask.dueDate && newTask.dueDate.trim() !== "" 
+      ? newTask.dueDate 
+      : new Date().toISOString().split('T')[0];
+
     const taskToAdd: Task = {
       ...newTask as Task,
       id: 't' + Math.random().toString(36).substr(2, 9),
@@ -332,7 +351,8 @@ export function TaskEngine({
       recurrenceInterval: newTask.recurrenceInterval || 1,
       recurrenceTimes: newTask.recurrenceTimes || 1,
       recurrencePeriod: newTask.recurrencePeriod || 'week',
-      recurrenceProgress: 1
+      recurrenceProgress: 1,
+      dueDate: baseDueDate
     };
 
     const generatedRecurrenceTasks: Task[] = [];
@@ -341,7 +361,10 @@ export function TaskEngine({
       const period = newTask.recurrencePeriod || 'week';
       
       for (let i = 2; i <= times; i++) {
-        let duedateObj = new Date(taskToAdd.dueDate);
+        let duedateObj = new Date(baseDueDate);
+        if (isNaN(duedateObj.getTime())) {
+          duedateObj = new Date();
+        }
         if (period === 'week') {
           const daysToAdd = Math.round((i - 1) * (7 / (times - 1 || 1)));
           duedateObj.setDate(duedateObj.getDate() + (isNaN(daysToAdd) ? 1 : daysToAdd));
@@ -433,9 +456,51 @@ export function TaskEngine({
     }
   };
 
+  const handleAutoFillDetails = async () => {
+    if (!newTask.name) {
+      toast.error("Please enter a task name first");
+      return;
+    }
+    setIsAutoFilling(true);
+    try {
+      const result = await suggestTaskDetails(newTask.name);
+      if (result) {
+        setNewTask(prev => ({
+          ...prev,
+          priority: result.priority as Priority,
+          type: result.type
+        }));
+        toast.success(`AI suggested: ${result.type} | ${result.priority}`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("AI could not classify the task details");
+    } finally {
+      setIsAutoFilling(false);
+    }
+  };
+
   const baseFilteredTasks = tasks.filter(t => {
     // Project filter logic
     if (filterProjectId && t.projectId !== filterProjectId) {
+      return false;
+    }
+
+    // External Assignee filter logic
+    if (filterAssigneeId && t.assigneeId !== filterAssigneeId) {
+      return false;
+    }
+
+    // External Status filter logic
+    if (filterStatus) {
+      const normalizedStatus = filterStatus.toString().replace('_', ' ');
+      if (t.status.toString().replace('_', ' ').toLowerCase() !== normalizedStatus.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // External Priority filter logic
+    if (filterPriority && t.priority.toString().toLowerCase() !== filterPriority.toString().toLowerCase()) {
       return false;
     }
 
@@ -658,24 +723,47 @@ export function TaskEngine({
 
   return (
     <div className="space-y-4">
-      {filterProjectId && (
-        <div className="bg-zinc-900 text-white px-4 py-3 rounded-xl flex items-center justify-between shadow-lg">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-xs uppercase">
-              {selectedProject?.name.charAt(0)}
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Filtering Tasks for</p>
-              <p className="text-sm font-bold tracking-tight">{selectedProject?.name || 'Selected Project'}</p>
-            </div>
+      {(filterProjectId || filterAssigneeId || filterStatus || filterPriority) && (
+        <div className="bg-zinc-950 dark:bg-zinc-900 border border-zinc-850 text-white p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-xl">
+          <div className="flex flex-wrap items-center gap-1.5 text-zinc-100">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mr-1.5">ACTIVE FILTERS:</span>
+            {filterProjectId && (
+              <span className="inline-flex items-center text-[10px] font-black uppercase tracking-wider bg-orange-500/10 text-orange-400 px-2.5 py-0.5 rounded-md border border-orange-500/25">
+                📁 Project: {selectedProject?.name || 'Selected'}
+                <button onClick={onClearFilter} className="ml-1.5 text-zinc-400 hover:text-white font-extrabold cursor-pointer text-[12px] leading-none">×</button>
+              </span>
+            )}
+            {filterAssigneeId && (
+              <span className="inline-flex items-center text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-400 px-2.5 py-0.5 rounded-md border border-purple-500/25">
+                👨‍💻 Assignee: {users.find(u => u.id === filterAssigneeId)?.name || 'Selected'}
+                <button onClick={onClearFilterAssignee} className="ml-1.5 text-zinc-400 hover:text-white font-extrabold cursor-pointer text-[12px] leading-none">×</button>
+              </span>
+            )}
+            {filterStatus && (
+              <span className="inline-flex items-center text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400 px-2.5 py-0.5 rounded-md border border-blue-500/25">
+                📈 Status: {filterStatus.replace('_', ' ')}
+                <button onClick={onClearFilterStatus} className="ml-1.5 text-zinc-400 hover:text-white font-extrabold cursor-pointer text-[12px] leading-none">×</button>
+              </span>
+            )}
+            {filterPriority && (
+              <span className="inline-flex items-center text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-400 px-2.5 py-0.5 rounded-md border border-rose-500/25">
+                ⚡ Priority: {filterPriority}
+                <button onClick={onClearFilterPriority} className="ml-1.5 text-zinc-400 hover:text-white font-extrabold cursor-pointer text-[12px] leading-none">×</button>
+              </span>
+            )}
           </div>
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={onClearFilter}
-            className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-white/10"
+            onClick={() => {
+              if (onClearFilter) onClearFilter();
+              if (onClearFilterAssignee) onClearFilterAssignee();
+              if (onClearFilterStatus) onClearFilterStatus();
+              if (onClearFilterPriority) onClearFilterPriority();
+            }}
+            className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white hover:bg-white/10 h-7 rounded-lg cursor-pointer px-3"
           >
-            Clear Filter
+            Clear All
           </Button>
         </div>
       )}
@@ -779,7 +867,20 @@ export function TaskEngine({
             </DialogHeader>
             <div className="grid gap-6 py-4">
               <div className="grid gap-2">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Task Name</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Task Name</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    type="button"
+                    className="h-6 text-[9px] font-extrabold uppercase tracking-widest text-orange-500 hover:text-orange-600 hover:bg-orange-50 px-2"
+                    onClick={handleAutoFillDetails}
+                    disabled={isAutoFilling}
+                  >
+                    <Sparkles className={cn("w-3 h-3 mr-1", isAutoFilling && "animate-spin")} />
+                    {isAutoFilling ? "Analyzing..." : "⚡ AI Auto-Fill Details"}
+                  </Button>
+                </div>
                 <Input 
                   placeholder="What needs to be done?" 
                   className="rounded-xl border-zinc-200"
@@ -1189,7 +1290,7 @@ export function TaskEngine({
                             <span className="text-xs font-semibold">{assignee?.name || 'Unassigned'}</span>
                           </div>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="min-w-[240px]">
                           {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
                             <SelectItem key={u.id} value={u.id}>
                               <div className="flex items-center space-x-2">
@@ -1470,14 +1571,14 @@ export function TaskEngine({
                                   </span>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Hours</label>
+                                <div className="grid grid-cols-3 gap-6 max-w-sm mt-3">
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Hours</label>
                                     <Input
                                       type="number"
                                       min="0"
                                       placeholder="0"
-                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-center"
                                       value={Math.floor((elapsedTimes[task.id] || 0) / 3600) || ''}
                                       onChange={(e) => {
                                         const hours = Math.max(0, parseInt(e.target.value) || 0);
@@ -1491,14 +1592,14 @@ export function TaskEngine({
                                       }}
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Minutes</label>
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Minutes</label>
                                     <Input
                                       type="number"
                                       min="0"
                                       max="59"
                                       placeholder="0"
-                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-center"
                                       value={Math.floor(((elapsedTimes[task.id] || 0) % 3600) / 60) || ''}
                                       onChange={(e) => {
                                         const mins = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
@@ -1512,14 +1613,14 @@ export function TaskEngine({
                                       }}
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Seconds</label>
+                                  <div className="flex flex-col gap-1.5">
+                                    <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Seconds</label>
                                     <Input
                                       type="number"
                                       min="0"
                                       max="59"
                                       placeholder="0"
-                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-850"
+                                      className="h-8 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-850 text-center"
                                       value={((elapsedTimes[task.id] || 0) % 60) || ''}
                                       onChange={(e) => {
                                         const secs = Math.min(59, Math.max(0, parseInt(e.target.value) || 0));
@@ -1601,8 +1702,9 @@ export function TaskEngine({
                           onDragLeave={handleDragLeave}
                           onDragEnd={handleDragEnd}
                           onDrop={(e) => handleDropOnTask(e, task.id)}
+                          onClick={() => setSelectedDetailTask(task)}
                           className={cn(
-                            "bg-white dark:bg-zinc-90 w-full border border-zinc-200/60 dark:border-zinc-800 p-4 rounded-xl shadow-sm transition-all duration-150 cursor-grab active:cursor-grabbing hover:border-zinc-300 dark:hover:border-zinc-700",
+                            "bg-white dark:bg-zinc-90 w-full border border-zinc-200/60 dark:border-zinc-800 p-4 rounded-xl shadow-sm transition-all duration-150 cursor-pointer hover:shadow-md hover:scale-[1.01] hover:border-zinc-300 dark:hover:border-zinc-700",
                             draggedTaskId === task.id && "opacity-45 scale-[0.98] border-dashed border-zinc-300 dark:border-zinc-700",
                             draggedOverTaskId === task.id && "border-t-2 border-brand-secondary pt-2 bg-brand-secondary/5 dark:bg-brand-secondary/10"
                           )}
@@ -1625,7 +1727,10 @@ export function TaskEngine({
 
                           {/* Card Main Title */}
                           <div 
-                            onClick={() => toggleExpand(task.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(task.id);
+                            }}
                             className="cursor-pointer group"
                           >
                             <h4 className="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 group-hover:text-brand-secondary transition-colors line-clamp-2">
@@ -1638,7 +1743,7 @@ export function TaskEngine({
 
                           {/* Pipeline Badge on card when not expanded */}
                           {task.workflowSteps && task.workflowSteps.length > 0 && (
-                            <div className="mt-3 p-1.5 bg-zinc-55/60 dark:bg-zinc-90 w/40 rounded-xl border border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between text-[10px] font-semibold text-zinc-550 dark:text-zinc-400 cursor-pointer" onClick={() => toggleExpand(task.id)}>
+                            <div className="mt-3 p-1.5 bg-zinc-55/60 dark:bg-zinc-90 w/40 rounded-xl border border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between text-[10px] font-semibold text-zinc-550 dark:text-zinc-400 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
                               <span className="truncate max-w-[170px] flex items-center gap-1.5">
                                 <span className="text-[8px] uppercase font-black text-brand-secondary shrink-0 tracking-wider">🔄 Active:</span>
                                 <span className="text-zinc-700 dark:text-zinc-300 font-extrabold truncate">{task.workflowSteps[task.currentStepIndex ?? 0].name}</span>
@@ -1651,7 +1756,7 @@ export function TaskEngine({
 
                           {/* Progress bar inside card if subtasks exist */}
                           {subtaskCount > 0 && (
-                            <div className="mt-4 space-y-1 cursor-pointer" onClick={() => toggleExpand(task.id)}>
+                            <div className="mt-4 space-y-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
                               <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 dark:text-zinc-500">
                                 <span>SUBTASKS</span>
                                 <span>{completedCount}/{subtaskCount} ({Math.round((completedCount/subtaskCount)*100)}%)</span>
@@ -1864,7 +1969,7 @@ export function TaskEngine({
                           </AnimatePresence>
 
                           {/* Card Controls Footer */}
-                          <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/60 mt-4 pt-3 gap-2">
+                          <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/60 mt-4 pt-3 gap-2" onClick={(e) => e.stopPropagation()}>
                             {/* User Selector Dropdown */}
                             <Select 
                               value={task.assigneeId} 
@@ -1872,7 +1977,7 @@ export function TaskEngine({
                                 setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assigneeId: newAssigneeId } : t));
                               }}
                             >
-                              <SelectTrigger className="h-7 border-none shadow-none focus:ring-0 p-0 hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded-lg pr-1.5 shrink-0 max-w-[125px] overflow-hidden text-zinc-750 dark:text-zinc-300">
+                              <SelectTrigger className="h-7 border-none shadow-none focus:ring-0 p-0 hover:bg-zinc-50 dark:hover:bg-zinc-850 rounded-lg pr-1.5 shrink min-w-[95px] max-w-[145px] overflow-hidden text-zinc-750 dark:text-zinc-300">
                                 <div className="flex items-center space-x-1.5 truncate">
                                   <Avatar className="w-5 h-5 border shadow-sm shrink-0">
                                     <AvatarFallback className="text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
@@ -1884,7 +1989,7 @@ export function TaskEngine({
                                   </span>
                                 </div>
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="min-w-[245px]">
                                 {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
                                   <SelectItem key={u.id} value={u.id}>
                                     <div className="flex items-center space-x-2">
@@ -1900,10 +2005,12 @@ export function TaskEngine({
 
                             {/* Clock timer + Context Trigger Menu */}
                             <div className="flex items-center space-x-1.5 shrink-0">
-                              <div className="flex items-center text-[10px] text-zinc-400 dark:text-zinc-500 font-medium whitespace-nowrap font-mono">
-                                <Clock className="w-3 h-3 mr-1 shrink-0" />
-                                <span>{task.dueDate ? task.dueDate.split('-').slice(1).join('/') : 'N/A'}</span>
-                              </div>
+                              {!(elapsedTimes[task.id] > 0) && (
+                                <div className="flex items-center text-[10px] text-zinc-405 dark:text-zinc-500 font-medium whitespace-nowrap font-mono mr-0.5">
+                                  <Clock className="w-3 h-3 mr-1 shrink-0" />
+                                  <span>{task.dueDate ? task.dueDate.split('-').slice(1).join('/') : 'N/A'}</span>
+                                </div>
+                              )}
 
                               {/* Play Timer Button */}
                               {elapsedTimes[task.id] > 0 && (
@@ -1921,7 +2028,10 @@ export function TaskEngine({
                                   "h-7 w-7 rounded-lg transition-all cursor-pointer",
                                   activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-650 text-white animate-pulse" : "bg-zinc-50 dark:bg-zinc-805 hover:bg-zinc-100 dark:hover:bg-zinc-750 text-zinc-550 dark:text-zinc-400"
                                 )}
-                                onClick={(e) => toggleTimer(task.id, e)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleTimer(task.id, e);
+                                }}
                               >
                                 {activeTimerTaskId === task.id ? (
                                   <Square className="w-2.5 h-2.5 fill-current" />
@@ -1937,19 +2047,41 @@ export function TaskEngine({
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
+                                      onClick={(e) => e.stopPropagation()}
                                       className="h-7 w-7 text-zinc-400 hover:text-zinc-650 hover:bg-zinc-105 dark:hover:bg-zinc-800 rounded-lg shrink-0 cursor-pointer"
                                     />
                                   }
                                 >
                                   <MoreHorizontal className="w-3.5 h-3.5" />
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-32 border-zinc-200 dark:border-zinc-800">
+                                <DropdownMenuContent align="end" className="w-44 border-zinc-200 dark:border-zinc-800 space-y-1">
+                                  <div className="px-2 py-1 text-[8px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Change Status</div>
+                                  {Object.values(TaskStatus).map((status) => (
+                                    <DropdownMenuItem
+                                      key={status}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateTaskStatus(task.id, status);
+                                      }}
+                                      className={cn(
+                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer flex items-center justify-between",
+                                        task.status === status ? "bg-zinc-50 dark:bg-zinc-900 text-brand-secondary font-black" : "text-zinc-600 dark:text-zinc-400"
+                                      )}
+                                    >
+                                      <span>{status}</span>
+                                      {task.status === status && <span className="text-[10px]">✓</span>}
+                                    </DropdownMenuItem>
+                                  ))}
+                                  <div className="h-[1px] bg-zinc-100 dark:bg-zinc-850 my-1" />
                                   <DropdownMenuItem 
                                     variant="destructive"
-                                    onClick={() => handleDeleteTask(task.id)}
-                                    className="text-xs font-bold uppercase tracking-widest cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteTask(task.id);
+                                    }}
+                                    className="text-xs font-bold uppercase tracking-widest cursor-pointer text-red-500 hover:text-red-650"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5 mr-2" />
+                                    <Trash2 className="w-3.5 h-3.5 mr-2 text-red-500" />
                                     Delete
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -1966,6 +2098,269 @@ export function TaskEngine({
           })}
         </div>
       )}
+
+      {/* Task Details Dialog Modal */}
+      <Dialog open={!!selectedDetailTask} onOpenChange={(open) => !open && setSelectedDetailTask(null)}>
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl p-6 bg-white dark:bg-zinc-950">
+          {(() => {
+            if (!selectedDetailTask) return null;
+            const task = tasks.find(t => t.id === selectedDetailTask.id);
+            if (!task) return null;
+
+            const project = projects.find(p => p.id === task.projectId);
+            const assignee = users.find(u => u.id === task.assigneeId);
+            const subtaskCount = task.subTasks?.length || 0;
+            const completedCount = task.subTasks?.filter(st => st.isCompleted).length || 0;
+
+            return (
+              <div className="space-y-6">
+                <DialogHeader className="border-b border-zinc-100 dark:border-zinc-850 pb-4">
+                  <DialogTitle className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 mb-1">
+                    {task.name}
+                  </DialogTitle>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <Badge variant="outline" className="text-[10px] font-bold border-zinc-200 bg-zinc-50 dark:bg-zinc-900/25 text-zinc-500">
+                      {project?.name || 'Global Project'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] font-bold border-zinc-200 bg-zinc-50 dark:bg-zinc-900/25 text-zinc-500">
+                      {task.type}
+                    </Badge>
+                    <span className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">
+                      Due: {task.dueDate || 'No Due Date'}
+                    </span>
+                  </div>
+                </DialogHeader>
+
+                {/* Quick Info Grid */}
+                <div className="grid grid-cols-2 gap-4 bg-zinc-50/50 dark:bg-zinc-900/10 p-3.5 rounded-xl border border-zinc-150 dark:border-zinc-850 shadow-sm">
+                  <div className="space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 block tracking-wider">Status</span>
+                    <Select 
+                      value={task.status} 
+                      onValueChange={(newStatus) => {
+                        handleUpdateTaskStatus(task.id, newStatus as TaskStatus);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 rounded-xl border-zinc-200 bg-white dark:bg-zinc-950 font-semibold text-xs">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[150px]">
+                        {Object.values(TaskStatus).map((status) => (
+                          <SelectItem key={status} value={status} className="text-xs uppercase font-semibold">
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 block tracking-wider">Priority</span>
+                    <Select 
+                      value={task.priority} 
+                      onValueChange={(newPriority) => {
+                        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, priority: newPriority as Priority } : t));
+                      }}
+                    >
+                      <SelectTrigger className="h-9 rounded-xl border-zinc-200 bg-white dark:bg-zinc-950 font-semibold text-xs">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[155px]">
+                        {Object.values(Priority).map((priority) => (
+                          <SelectItem key={priority} value={priority} className="text-xs uppercase font-semibold">
+                            {priority}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="col-span-2 space-y-1 pb-1">
+                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider block">Assignee</span>
+                    <div className="flex items-center space-x-3 bg-white dark:bg-zinc-950 border border-zinc-150 rounded-xl p-2.5 shadow-sm">
+                      <Avatar className="w-8 h-8 border shadow-sm">
+                        <AvatarFallback className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700">
+                          {assignee?.name ? assignee.name.charAt(0) : '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-bold block text-zinc-900 dark:text-zinc-100 truncate">
+                          {assignee?.name || 'Unassigned'}
+                        </span>
+                        <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 block">
+                          {assignee?.role || 'Expert'}
+                        </span>
+                      </div>
+                      <Select 
+                        value={task.assigneeId} 
+                        onValueChange={(newAssigneeId) => {
+                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assigneeId: newAssigneeId } : t));
+                        }}
+                      >
+                        <SelectTrigger className="h-8 border-none bg-zinc-100 hover:bg-zinc-200 rounded-lg text-[10px] px-2.5 font-bold uppercase tracking-wider max-w-[105px]">
+                          Change
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[245px]">
+                          {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
+                            <SelectItem key={u.id} value={u.id}>
+                              <div className="flex items-center space-x-2">
+                                <Avatar className="w-5 h-5 border shadow-sm">
+                                  <AvatarFallback className="text-[8px] font-bold bg-zinc-100 dark:bg-zinc-800">{u.name.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs">{u.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                {task.description && (
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider block">Description</span>
+                    <div className="text-xs text-zinc-650 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-900/10 border border-zinc-150 dark:border-zinc-850 p-3.5 rounded-xl font-medium">
+                      {task.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Workflow Stepper Progress */}
+                {task.workflowSteps && task.workflowSteps.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-zinc-450 dark:text-zinc-500 tracking-wider block">Workflow Pipeline Route</span>
+                    <div className="p-4 bg-zinc-50/50 dark:bg-zinc-900/10 border border-zinc-150 dark:border-zinc-850 rounded-xl space-y-4 shadow-sm">
+                      <div className="relative pl-1 space-y-3.5">
+                        <div className="absolute left-3.5 top-2.5 bottom-2.5 w-0.5 bg-zinc-200 dark:bg-zinc-850" />
+                        {task.workflowSteps.map((step, idx) => {
+                          const isCompleted = step.isCompleted;
+                          const isActive = idx === (task.currentStepIndex ?? 0);
+                          const stepAssignee = users.find(u => u.id === step.assigneeId);
+
+                          return (
+                            <div key={step.id} className={cn(
+                              "flex items-center justify-between pl-0.5 relative z-10 transition-all",
+                              isActive ? "scale-[1.01] bg-brand-secondary/[0.04] p-1.5 rounded-lg border border-brand-secondary/20" : "opacity-80"
+                            )}>
+                              <div className="flex items-center space-x-3.5 min-w-0">
+                                <div className={cn(
+                                  "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-extrabold border shrink-0 transition-all",
+                                  isCompleted 
+                                    ? "bg-emerald-500 border-emerald-500 text-white shadow-sm" 
+                                    : isActive 
+                                      ? "bg-brand-secondary border-brand-secondary text-white animate-pulse" 
+                                      : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500"
+                                )}>
+                                  {isCompleted ? "✓" : idx + 1}
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  <span className={cn(
+                                    "text-xs font-bold truncate tracking-tight text-zinc-800 dark:text-zinc-200",
+                                    isCompleted && "line-through text-zinc-400 dark:text-zinc-600"
+                                  )}>
+                                    {step.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-zinc-455 dark:text-zinc-500 truncate">
+                                    {stepAssignee?.name || 'Unassigned'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {((task.currentStepIndex ?? 0) < task.workflowSteps.length) && (
+                        <Button
+                          size="sm"
+                          className="w-full bg-brand-secondary hover:bg-brand-secondary/95 text-white font-bold text-xs uppercase tracking-wider py-2 h-9 rounded-xl shrink-0 cursor-pointer shadow-sm transition-all shadow-brand-secondary/5 mt-1"
+                          onClick={() => {
+                            completeWorkflowStep(task.id, task.workflowSteps![task.currentStepIndex ?? 0].id);
+                          }}
+                        >
+                          🚀 Complete Current Stage & Hand off
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Subtasks */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider">Subtasks ({completedCount}/{subtaskCount})</span>
+                    {subtaskCount > 0 && <span className="text-[10px] font-mono text-zinc-400 font-bold">{Math.round((completedCount/subtaskCount)*100)}% Completed</span>}
+                  </div>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {task.subTasks?.map((subtask) => (
+                      <div 
+                        key={subtask.id} 
+                        className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/10 p-2.5 rounded-xl border border-zinc-150 dark:border-zinc-850 shadow-sm"
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <Checkbox 
+                            checked={subtask.isCompleted} 
+                            onCheckedChange={() => toggleSubtask(task.id, subtask.id)}
+                            className="brand-checkbox"
+                          />
+                          <span className={cn(
+                            "text-xs font-semibold text-zinc-700 dark:text-zinc-300",
+                            subtask.isCompleted ? "text-zinc-400 dark:text-zinc-600 line-through" : ""
+                          )}>
+                            {subtask.name}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="relative pt-1">
+                      <Input 
+                        placeholder="Add sub-task & press Enter..." 
+                        className="h-9 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs pl-8 pr-3 focus-visible:ring-brand-secondary/20 rounded-xl"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            addSubtask(task.id, (e.target as HTMLInputElement).value);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }}
+                      />
+                      <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-450" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timesheet Duration and Log Toggle inside Modal */}
+                <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-850 pt-5 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] uppercase font-extrabold text-zinc-405 dark:text-zinc-550 block">Time Spent Tracker</span>
+                    <span className="font-mono text-lg font-black text-zinc-900 dark:text-white block">
+                      {formatTime(elapsedTimes[task.id] || 0)}
+                    </span>
+                  </div>
+
+                  <Button 
+                    variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
+                    size="sm"
+                    className={cn(
+                      "h-9 px-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer",
+                      activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                    )}
+                    onClick={(e) => toggleTimer(task.id, e)}
+                  >
+                    {activeTimerTaskId === task.id ? (
+                      <>Stop Live Tracker</>
+                    ) : (
+                      <>Start Live Tracker</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -94,6 +94,7 @@ export interface UserProfile {
   avatarUrl?: string;
   status?: 'active' | 'inactive';
   isActive?: boolean;
+  workLocation?: 'In Office' | 'Work From Home' | 'Leave' | 'Appear Away';
 }
 
 export interface Project {
@@ -151,6 +152,7 @@ export interface Task {
   recurrenceTimes?: number; // e.g. thrice (3 times), monthly (12 times)
   recurrencePeriod?: 'week' | 'month'; // e.g. weekly or monthly recurrence
   recurrenceProgress?: number; // how many recurring tasks have been generated so far
+  isBillable?: boolean;
 }
 
 export interface Deliverable {

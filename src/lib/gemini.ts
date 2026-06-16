@@ -32,7 +32,7 @@ export async function suggestAssignee(
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -54,3 +54,40 @@ export async function suggestAssignee(
     return { assigneeId: experts[0]?.id, reason: "Manual assignment fallback." };
   }
 }
+
+export async function suggestTaskDetails(taskTitle: string) {
+  const prompt = `
+    You are an AI Resource Planner at Blufig.
+    Analyze the following Task Title: "${taskTitle}"
+    
+    Predict and suggest:
+    1. Task Priority: One of "Low", "Normal", "High", "Critical".
+    2. Department Label (Task Type): One of "Web Development", "Design", "Adhoc", "Strategy", "Content".
+
+    Return the result in JSON format containing "priority" and "type".
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            priority: { type: Type.STRING },
+            type: { type: Type.STRING }
+          },
+          required: ["priority", "type"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text) as { priority: string; type: string };
+  } catch (error) {
+    console.error("AI Task details Estimation Error:", error);
+    return { priority: "Normal", type: "Adhoc" };
+  }
+}
+

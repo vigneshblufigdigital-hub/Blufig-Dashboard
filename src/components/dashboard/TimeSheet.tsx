@@ -9,10 +9,12 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Clock, Calendar, ArrowUpRight, BarChart3, MoreHorizontal, Play, Pause, Square } from 'lucide-react';
+import { Clock, Calendar, ArrowUpRight, BarChart3, MoreHorizontal, Play, Pause, Square, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Task, Project } from '@/src/types';
+import { Task, Project, UserRole, UserProfile } from '@/src/types';
+import { useAuth } from '../../contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface TimeSheetProps {
   tasks: Task[];
@@ -33,45 +35,132 @@ export function TimeSheet({
   toggleTimer,
   formatTime,
 }: TimeSheetProps) {
+  const { user: currentUser } = useAuth();
+  
   // Find current running task
   const activeTask = tasks.find(t => t.id === activeTimerTaskId);
   const activeProject = activeTask ? projects.find(p => p.id === activeTask.projectId) : null;
 
+  // Track manual billing overrides for static logs that aren't backed by tasks
+  const [staticBillingOverrides, setStaticBillingOverrides] = React.useState<Record<string, 'Billable' | 'Non-Billable'>>({});
+
+  // Auth privilege check for deciding billable status (Super Admins, Account Managers, Account Directors)
+  const canModifyBilling = currentUser && (
+    currentUser.role === UserRole.AGENCY_ADMIN || 
+    currentUser.role === UserRole.ACCOUNT_MANAGER || 
+    currentUser.role === UserRole.ACCOUNT_DIRECTOR
+  );
+
   // Build current activity logs using real task logged values combined with historical logs
   const realLogs = tasks
-    .filter(t => (elapsedTimes[t.id] || 0) > 0)
+    .filter(t => ((elapsedTimes && elapsedTimes[t.id]) || 0) > 0)
     .map(t => {
       const proj = projects.find(p => p.id === t.projectId);
       const isRunning = t.id === activeTimerTaskId;
+      const isTaskBillable = t.isBillable !== undefined ? t.isBillable : (t.type === 'Strategy' || t.type === 'Production');
       return {
         id: t.id,
         task: t.name,
         project: proj?.name || 'Global Project',
         user: 'You',
-        date: t.updatedAt ? t.updatedAt.split('T')[0] : '2024-05-12',
-        durationSecs: elapsedTimes[t.id] || 0,
-        billing: t.type === 'Strategy' || t.type === 'Production' ? 'Billable' : 'Non-Billable',
+        date: t.updatedAt ? t.updatedAt.split('T')[0] : '2026-06-16',
+        durationSecs: (elapsedTimes && elapsedTimes[t.id]) || 0,
+        billing: isTaskBillable ? 'Billable' : 'Non-Billable' as 'Billable' | 'Non-Billable',
         isRunning,
+        isReal: true
       };
     });
 
   // Calculate dynamic metrics based on live updates
-  const totalRealSeconds = Object.values(elapsedTimes).reduce((sum, current) => sum + current, 0);
+  const totalRealSeconds = Object.values(elapsedTimes || {}).reduce((sum, current) => sum + current, 0);
   const totalBaseHours = 124.5;
   const liveTotalHours = (totalBaseHours + (totalRealSeconds / 3600)).toFixed(1);
 
   // Fallback default static logs if no tasks are manually logged yet
   const staticLogs = [
-    { id: 'static-1', task: 'Monthly SEO Audit', project: 'Acme Corp Retainer', user: 'Rashmi Alurkar', date: '2024-05-12', durationSecs: 9000, billing: 'Billable', isRunning: false },
-    { id: 'static-2', task: 'Google Ads Optimization', project: 'Paid Social Campaigns', user: 'Ajay Kulkarni', date: '2024-05-12', durationSecs: 4320, billing: 'Billable', isRunning: false },
-    { id: 'static-3', task: 'Internal Strategy Sync', project: 'Strategy & Ops', user: 'Nishi Kant', date: '2024-05-11', durationSecs: 2880, billing: 'Non-Billable', isRunning: false },
+    { id: 'static-1', task: 'Monthly SEO Audit', project: 'Acme Corp Retainer', user: 'Rashmi Alurkar', date: '2026-06-15', durationSecs: 9000, billing: 'Billable' as 'Billable' | 'Non-Billable', isRunning: false },
+    { id: 'static-2', task: 'Google Ads Optimization', project: 'Paid Social Campaigns', user: 'Ajay Kulkarni', date: '2026-06-14', durationSecs: 4320, billing: 'Billable' as 'Billable' | 'Non-Billable', isRunning: false },
+    { id: 'static-3', task: 'Internal Strategy Sync', project: 'Strategy & Ops', user: 'Nishi Kant', date: '2026-06-12', durationSecs: 2880, billing: 'Non-Billable' as 'Billable' | 'Non-Billable', isRunning: false },
   ];
 
-  // Filter out any overlap from static logs to keep display clean
+  // Combine and apply overrides
   const displayedLogs = [
     ...realLogs,
     ...staticLogs.filter(s => !realLogs.some(r => r.task === s.task))
-  ];
+  ].map(log => {
+    if (staticBillingOverrides[log.id]) {
+      return { ...log, billing: staticBillingOverrides[log.id] };
+    }
+    return log;
+  });
+
+  // Handler to toggle billing
+  const handleToggleBilling = (logId: string, currentBilling: 'Billable' | 'Non-Billable') => {
+    if (!canModifyBilling) {
+      toast.error("Only Super Admins and Account Managers can decide billing status!");
+      return;
+    }
+
+    const nextBilling = currentBilling === 'Billable' ? 'Non-Billable' : 'Billable';
+
+    // If it's a real task log, update the task state globally, otherwise write to local static overrides
+    const realTaskExists = tasks.some(t => t.id === logId);
+    if (realTaskExists) {
+      setTasks(prev => prev.map(t => {
+        if (t.id === logId) {
+          return { ...t, isBillable: nextBilling === 'Billable' };
+        }
+        return t;
+      }));
+    } else {
+      setStaticBillingOverrides(prev => ({ ...prev, [logId]: nextBilling }));
+    }
+
+    toast.success(`Billing status of "${displayedLogs.find(l => l.id === logId)?.task}" changed to ${nextBilling}!`);
+  };
+
+  // Monthly timesheet CSV downloader
+  const handleExportCSV = () => {
+    const headers = ['Task / Activity', 'Project', 'Expert / User', 'Date', 'Duration (Formatted)', 'Duration (Seconds)', 'Billing Type'];
+    
+    const rows = displayedLogs.map(log => [
+      `"${log.task.replace(/"/g, '""')}"`,
+      `"${log.project.replace(/"/g, '""')}"`,
+      `"${log.user.replace(/"/g, '""')}"`,
+      `"${log.date}"`,
+      typeof log.durationSecs === 'number' ? formatTime(log.durationSecs) : log.durationSecs,
+      log.durationSecs,
+      log.billing
+    ]);
+    
+    const totalDurationSecs = displayedLogs.reduce((sum, log) => sum + (typeof log.durationSecs === 'number' ? log.durationSecs : 0), 0);
+    const totalRow = [
+      '"Total Timing Summary (All Logs)"',
+      '""',
+      '""',
+      '""',
+      formatTime(totalDurationSecs),
+      totalDurationSecs,
+      '""'
+    ];
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(',')),
+      totalRow.join(',')
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `blufig_timesheet_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("CSV Timesheet exported successfully!");
+  };
 
   return (
     <div className="space-y-6">
@@ -170,7 +259,8 @@ export function TimeSheet({
              <CardTitle className="text-xl font-bold tracking-tight">Recent Activity Log</CardTitle>
              <p className="text-xs text-zinc-400 font-medium mt-1">Cross-department time synchronization</p>
            </div>
-           <Button variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest">
+           <Button onClick={handleExportCSV} variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest gap-1.5 flex items-center">
+             <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" />
              Export Timesheet
            </Button>
         </CardHeader>
@@ -221,12 +311,28 @@ export function TimeSheet({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={cn(
-                        "text-[10px] font-bold uppercase tracking-wider",
-                        log.billing === 'Billable' ? "text-emerald-500" : "text-amber-500"
-                      )}>
-                        {log.billing}
-                      </span>
+                      {canModifyBilling ? (
+                        <button
+                          onClick={() => handleToggleBilling(log.id, log.billing)}
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded transition-all flex items-center gap-1 cursor-pointer bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700",
+                            log.billing === 'Billable' ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                          )}
+                          title="Click to toggle (Super Admins & AM Only)"
+                        >
+                          <span className={cn("w-1 h-1 rounded-full", log.billing === 'Billable' ? "bg-emerald-500" : "bg-amber-500")} />
+                          {log.billing}
+                          <span className="text-[8.5px] opacity-75">▼</span>
+                        </button>
+                      ) : (
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 px-2 py-0.5 border border-transparent",
+                          log.billing === 'Billable' ? "text-emerald-500" : "text-amber-500"
+                        )}>
+                          <span className={cn("w-1 h-1 rounded-full", log.billing === 'Billable' ? "bg-emerald-500" : "bg-amber-500")} />
+                          {log.billing}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="pr-6">
                       <div className="flex items-center justify-end space-x-1">

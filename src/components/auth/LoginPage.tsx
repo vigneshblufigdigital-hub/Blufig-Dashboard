@@ -20,7 +20,9 @@ import {
   Sparkles,
   Users2,
   Send,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -31,6 +33,7 @@ export function LoginPage() {
   // States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<'agency' | 'client'>('agency');
   const [loading, setLoading] = useState(false);
 
@@ -334,12 +337,20 @@ export function LoginPage() {
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                       <Input 
                         id="password" 
-                        type="password" 
+                        type={showPassword ? "text" : "password"} 
                         placeholder="••••••••••••••" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="pl-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl font-mono"
+                        className="pl-10 pr-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl font-mono"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200 cursor-pointer focus:outline-none"
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
                 </CardContent>

@@ -11,6 +11,7 @@ import {
   Download, 
   Clock, 
   ExternalLink,
+  LifeBuoy,
   AlertCircle,
   ThumbsUp,
   RotateCcw,
@@ -534,113 +535,42 @@ export function ClientPortal({
             {/* Right Side Column - Live Reports and Contacts */}
             <div className="lg:col-span-4 space-y-6">
 
-              {/* Dedicated Workspace Team Card */}
-              <Card className="border border-zinc-200/60 dark:border-zinc-800/80 shadow-lg rounded-2xl overflow-hidden bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md">
-                <CardHeader className="bg-zinc-50/60 dark:bg-zinc-950/40 pb-3 border-b border-zinc-100 dark:border-zinc-850">
+              {/* Branded Support Desk Card */}
+              <Card className="border border-zinc-200/60 dark:border-zinc-800/80 shadow-lg rounded-2xl overflow-hidden bg-white/85 dark:bg-zinc-900/85 backdrop-blur-md">
+                <CardHeader className="bg-zinc-50/60 dark:bg-zinc-950/40 pb-4 border-b border-zinc-100 dark:border-zinc-850">
                   <div className="flex items-center space-x-2">
-                    <Users className="w-5 h-5 text-orange-500" />
+                    <LifeBuoy className="w-5 h-5 text-brand-secondary animate-pulse" />
                     <div>
-                      <CardTitle className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Client Delivery Group</CardTitle>
-                      <CardDescription className="text-[10px] mt-0.5 font-semibold text-zinc-500 dark:text-zinc-440">Your dedicated executives, managers, and campaign specialists.</CardDescription>
+                      <CardTitle className="text-sm font-bold text-zinc-900 dark:text-zinc-100">BluFig Support Desk</CardTitle>
+                      <CardDescription className="text-[10px] mt-0.5 font-semibold text-zinc-550 dark:text-zinc-400">Need assistance? Your dedicated BluFig support squad is standing by.</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-4 space-y-5">
-                  
-                  {/* Tier 1: Executive Supervisor */}
-                  {ceo && (
-                    <div className="space-y-1.5">
-                      <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none">Executive Sponsor</p>
-                      <div className="p-3 bg-zinc-50/70 dark:bg-zinc-950/40 rounded-xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2.5">
-                        <div className="flex items-center space-x-2.5 min-w-0">
-                          <Avatar className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm shrink-0">
-                            <AvatarImage src={ceo.avatarUrl} />
-                            <AvatarFallback className="text-[10px] bg-zinc-800 text-white font-bold flex items-center justify-center">
-                              {ceo.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{ceo.name}</p>
-                            <p className="text-[9px] font-bold text-zinc-550 dark:text-zinc-400 uppercase tracking-tight">{ceo.designation || 'Chief Executive Partner'}</p>
-                          </div>
-                        </div>
-                        <a 
-                          href={`mailto:${ceo.email}`}
-                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors shrink-0"
-                          title={`Email ${ceo.name}`}
-                        >
-                          <Mail className="w-3.5 h-3.5" />
-                        </a>
-                      </div>
-                    </div>
-                  )}
+                <CardContent className="p-4 space-y-4">
+                  <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                    Submit your tickets and inquiry briefings directly to our support desk. We deliver change-rolls, updates, and live assistance globally.
+                  </p>
 
-                  {/* Tier 2: Account Managers */}
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none">Campaign Project Lead{(campaignManagers.length === 1) ? '' : 's'}</p>
-                    <div className="space-y-1.5">
-                      {campaignManagers.length > 0 ? campaignManagers.map(cm => (
-                        <div key={cm.id} className="p-3 bg-zinc-50/70 dark:bg-zinc-950/40 rounded-xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2.5">
-                          <div className="flex items-center space-x-2.5 min-w-0">
-                            <Avatar className="w-8 h-8 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm shrink-0">
-                              <AvatarImage src={cm.avatarUrl} />
-                              <AvatarFallback className="text-[10px] bg-zinc-800 text-white font-bold flex items-center justify-center">
-                                {cm.name.charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{cm.name}</p>
-                              <p className="text-[9px] font-bold text-zinc-550 dark:text-zinc-400 uppercase tracking-tight">{cm.designation || 'Account Director'}</p>
-                            </div>
-                          </div>
-                          <a 
-                            href={`mailto:${cm.email}`}
-                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors shrink-0"
-                            title={`Email ${cm.name}`}
-                          >
-                            <Mail className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                      )) : (
-                        <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 italic">No assigned project leads found.</p>
-                      )}
+                  <Button 
+                    className="w-full bg-brand-secondary hover:bg-brand-secondary/95 text-white font-extrabold text-xs uppercase tracking-wider h-10 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shadow-brand-secondary/5"
+                    onClick={() => {
+                      window.location.href = "mailto:connect@blufig.digital?cc=pintu@blufig.digital,vignesh@blufig.digital,ankit@blufig.digital&subject=Support%20Desk%20Inquiry%20-%20BluFig%20Operations";
+                    }}
+                  >
+                    <Mail className="w-4 h-4 shrink-0" />
+                    Contact Support Desk
+                  </Button>
+
+                  <div className="flex flex-col gap-2 pt-1 text-[10px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-widest leading-none">
+                    <div className="flex items-center justify-between">
+                      <span>Primary Email Desk:</span>
+                      <span className="font-mono text-zinc-650 dark:text-zinc-300 select-all font-extrabold text-[11px] lowercase">connect@blufig.digital</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>CC Addresses:</span>
+                      <span className="font-mono text-zinc-500 select-all font-extrabold text-[9px] lowercase">pintu, vignesh, ankit</span>
                     </div>
                   </div>
-
-                  {/* Tier 3: Specialists Working on Project */}
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none">Campaign Specialists & Working Experts</p>
-                    <div className="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar pr-0.5">
-                      {workingSpecialists.length > 0 ? workingSpecialists.map(ws => (
-                        <div key={ws.id} className="p-2.5 bg-zinc-50/40 dark:bg-zinc-950/20 rounded-xl border border-zinc-100/60 dark:border-zinc-800/40 flex items-center justify-between gap-2">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <Avatar className="w-7 h-7 rounded-lg border border-zinc-150 dark:border-zinc-800 shadow-none shrink-0">
-                              <AvatarImage src={ws.avatarUrl} />
-                              <AvatarFallback className="text-[9px] bg-zinc-100 dark:bg-zinc-800 text-zinc-650 dark:text-zinc-400 font-bold flex items-center justify-center">
-                                {ws.name.charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-zinc-855 dark:text-zinc-200 truncate">{ws.name}</p>
-                              <p className="text-[9px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-tight truncate">
-                                {ws.designation || ws.role}
-                              </p>
-                            </div>
-                          </div>
-                          <a 
-                            href={`mailto:${ws.email}`}
-                            className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors shrink-0"
-                            title={`Email ${ws.name}`}
-                          >
-                            <Mail className="w-3 h-3" />
-                          </a>
-                        </div>
-                      )) : (
-                        <p className="text-[10px] font-medium text-zinc-450 dark:text-zinc-500 italic">No additional specialists assigned to active sprints.</p>
-                      )}
-                    </div>
-                  </div>
-
                 </CardContent>
               </Card>
 

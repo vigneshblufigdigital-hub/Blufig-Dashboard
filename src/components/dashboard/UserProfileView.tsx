@@ -22,6 +22,7 @@ import {
   Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '@/lib/utils';
 import { UserProfile, UserRole, Department } from '../../types';
 import { MOCK_USERS } from '../../mockData';
 import { toast } from 'sonner';
@@ -31,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Preset Avatars (Emoji Glyphs) for awesome UX
 const PRESET_AVATARS = [
@@ -61,6 +63,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
   const [profileDesignation, setProfileDesignation] = useState(user.designation || 'Specialist');
   const [profileAvatar, setProfileAvatar] = useState(user.avatarUrl || '👨‍💻');
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+  const [workLocation, setWorkLocation] = useState<'In Office' | 'Work From Home' | 'Leave' | 'Appear Away'>(user.workLocation || 'In Office');
   const [selectedFolder, setSelectedFolder] = useState<'profile' | 'preferences' | 'knowledge' | 'tree'>('profile');
   
   // Selected tree node for detail popover / side drawer
@@ -79,7 +82,8 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
     const finalAvatar = customAvatarUrl.trim() || profileAvatar;
     const updatedUser: UserProfile = {
       ...user,
-      avatarUrl: finalAvatar
+      avatarUrl: finalAvatar,
+      workLocation: workLocation
     };
 
     // Update context state
@@ -155,12 +159,34 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
       <div className="lg:col-span-3 space-y-2">
         <Card className="p-4 border-zinc-200/60 dark:border-zinc-800 shadow-sm bg-card">
           <div className="flex items-center space-x-3 mb-4 p-2 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-brand-secondary to-orange-550 border-2 border-background shadow-lg flex items-center justify-center text-xl select-none">
-              {user.avatarUrl && user.avatarUrl.length < 4 ? user.avatarUrl : user.name.charAt(0)}
+            <div className="w-12 h-12 rounded-full border-2 border-zinc-100 dark:border-zinc-800 shadow-lg flex items-center justify-center text-xl select-none overflow-hidden bg-zinc-50 dark:bg-zinc-900 shrink-0">
+              {user.avatarUrl && (user.avatarUrl.startsWith('http') || user.avatarUrl.startsWith('/') || user.avatarUrl.startsWith('data:')) ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span>{user.avatarUrl || user.name.charAt(0)}</span>
+              )}
             </div>
             <div>
               <h4 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 line-clamp-1">{user.name}</h4>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold uppercase tracking-wider">{user.designation}</p>
+              <div className="mt-1">
+                <span className={cn(
+                  "inline-flex items-center text-[8.5px] font-black uppercase tracking-wider py-0.5 px-2 rounded-full border shadow-sm",
+                  user.workLocation === 'Work From Home' ? "bg-blue-500/5 text-blue-600 border-blue-500/10 dark:text-blue-400" :
+                  user.workLocation === 'Leave' ? "bg-rose-500/5 text-rose-600 border-rose-500/10 dark:text-rose-400" :
+                  user.workLocation === 'Appear Away' ? "bg-zinc-500/5 text-zinc-550 border-zinc-500/10 dark:text-zinc-400" :
+                  "bg-emerald-500/5 text-emerald-600 border-emerald-500/10 dark:text-emerald-400"
+                )}>
+                  <span className={cn(
+                    "w-1 h-1 rounded-full mr-1 shrink-0",
+                    user.workLocation === 'Work From Home' ? "bg-blue-500" :
+                    user.workLocation === 'Leave' ? "bg-rose-500" :
+                    user.workLocation === 'Appear Away' ? "bg-zinc-400" :
+                    "bg-emerald-500"
+                  )} />
+                  {user.workLocation || 'In Office'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -326,6 +352,83 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                       className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono text-xs bg-white dark:bg-zinc-950"
                       placeholder="e.g. https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100"
                     />
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <Label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">
+                      Upload Profile Picture from Local Computer
+                    </Label>
+                    <div className="flex items-center space-x-4">
+                      {/* Avatar Preview */}
+                      <div className="w-16 h-16 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 flex items-center justify-center overflow-hidden shrink-0">
+                        {customAvatarUrl ? (
+                          <img 
+                            src={customAvatarUrl} 
+                            alt="Avatar Preview" 
+                            className="w-full h-full object-cover" 
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-3xl select-none">{profileAvatar}</span>
+                        )}
+                      </div>
+                      
+                      {/* Upload Box */}
+                      <div className="flex-1">
+                        <label className="flex flex-col items-center justify-center h-16 px-4 py-2 bg-white dark:bg-zinc-950 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl cursor-pointer hover:border-brand-secondary hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-all">
+                          <div className="flex flex-col items-center justify-center space-y-1">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider text-center">
+                              Drag & drop or <span className="text-brand-secondary">browse files</span>
+                            </span>
+                            <span className="text-[9px] text-zinc-400 dark:text-zinc-500">
+                              Supports JPG, PNG up to 2MB
+                            </span>
+                          </div>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 2 * 1024 * 1024) {
+                                  toast.error("File size exceeds 2MB limit!");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  const resultStr = reader.result as string;
+                                  setCustomAvatarUrl(resultStr);
+                                  setProfileAvatar(resultStr);
+                                  toast.success("Profile picture loaded from local computer!");
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="prof-location" className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                      Current Work Location / Status
+                    </Label>
+                    <Select 
+                      value={workLocation} 
+                      onValueChange={(val: any) => setWorkLocation(val)}
+                    >
+                      <SelectTrigger id="prof-location" className="h-11 rounded-xl border-zinc-200 dark:border-zinc-805 text-xs font-semibold bg-white dark:bg-zinc-950">
+                        <SelectValue placeholder="In Office" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="In Office">🏢 In Office</SelectItem>
+                        <SelectItem value="Work From Home">🏠 Work From Home</SelectItem>
+                        <SelectItem value="Leave">🌴 On Leave</SelectItem>
+                        <SelectItem value="Appear Away">🌙 Appear Away</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="bg-zinc-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-zinc-150 dark:border-zinc-800/80 space-y-1.5 font-sans">

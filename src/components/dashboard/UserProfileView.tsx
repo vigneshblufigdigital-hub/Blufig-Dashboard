@@ -65,6 +65,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   const [workLocation, setWorkLocation] = useState<'In Office' | 'Work From Home' | 'Leave' | 'Appear Away'>(user.workLocation || 'In Office');
   const [selectedFolder, setSelectedFolder] = useState<'profile' | 'preferences' | 'knowledge' | 'tree'>('profile');
+  const [searchTermTree, setSearchTermTree] = useState('');
   
   // Selected tree node for detail popover / side drawer
   const [selectedTreeMember, setSelectedTreeMember] = useState<UserProfile | null>(user);
@@ -97,40 +98,11 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
     toast.success("Profile preferences and avatar saved successfully!");
   };
 
-  // Filter team members based on department isolation ("their team members only, not all members")
-  const isUserAdmin = user.role === UserRole.AGENCY_ADMIN;
-  const myTeamList = usersList.filter(u => {
-    if (isUserAdmin) {
-      // CEO/Admin sees Management department colleagues and direct operational directors
-      return u.department === Department.MANAGEMENT || u.role === UserRole.ACCOUNT_DIRECTOR;
-    }
-    // Employees see team members within their same department, plus the Agency Admin (CEO) as the head of reporting
-    return u.department === user.department || u.role === UserRole.AGENCY_ADMIN;
-  });
+  // Show all agency teammates without department isolation or hierarchy constraints
+  const myTeamList = usersList.filter(u => u.role !== UserRole.CLIENT);
 
-  const ceo = myTeamList.find(u => u.role === UserRole.AGENCY_ADMIN) || usersList.find(u => u.role === UserRole.AGENCY_ADMIN);
-  
-  const directorCandidate = myTeamList.find(u => 
-    u.role === UserRole.ACCOUNT_DIRECTOR || 
-    u.designation.toLowerCase().includes('lead') || 
-    u.designation.toLowerCase().includes('director')
-  );
-  const director = (directorCandidate && ceo && directorCandidate.id !== ceo.id) ? directorCandidate : null;
-  
-  const managers = myTeamList.filter(u => {
-    if (ceo && u.id === ceo.id) return false;
-    if (director && u.id === director.id) return false;
-    return u.role === UserRole.ACCOUNT_MANAGER || 
-           u.role === UserRole.DIGITAL_LEAD || 
-           u.designation.toLowerCase().includes('manager');
-  });
-
-  const digitalAndSales = myTeamList.filter(u => {
-    if (ceo && u.id === ceo.id) return false;
-    if (director && u.id === director.id) return false;
-    if (managers.some(m => m.id === u.id)) return false;
-    return u.role !== UserRole.CLIENT;
-  });
+  const ceo = usersList.find(u => u.role === UserRole.AGENCY_ADMIN);
+  const director = usersList.find(u => u.role === UserRole.ACCOUNT_DIRECTOR);
 
   // --- Full Agency Organogram Calculations ---
   // Amit is the CEO. All leads & managers fall under Amit, and employees and respective teams come under managers.
@@ -237,7 +209,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                 }`}
               >
                 <Layers className="w-4 h-4 shrink-0" />
-                <span>Teammates Organogram</span>
+                <span>Teammates Directory</span>
               </button>
             )}
           </div>
@@ -671,7 +643,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
             </motion.div>
           )}
 
-          {/* TREE DIAGRAM TAB */}
+          {/* FLAT TEAMMATES DIRECTORY TAB */}
           {selectedFolder === 'tree' && (
             <motion.div
               key="tree"
@@ -684,176 +656,121 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                 <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-6 font-sans">
                   <h3 className="text-lg font-bold flex items-center">
                     <Layers className="w-5 h-5 mr-2 text-brand-secondary" />
-                    Teammates Reporting Structure Organogram
+                    Teammates Directory
                   </h3>
                   <p className="text-xs text-zinc-450 dark:text-zinc-400 mt-1">
-                    A beautiful visual hierarchy of BluFig. Click any teammate to inspect tags, emails, and professional skill metrics in the side tray.
+                    Manage and view BluFig digital workforce colleagues. Click any colleague card to instantly inspect specialized skill tags, email listings, and general department roles.
                   </p>
                 </div>
 
+                {/* Filter and search bars */}
+                <div className="mb-6">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </span>
+                    <Input
+                      type="text"
+                      placeholder="Search teammates by name, designation, or department..."
+                      value={searchTermTree}
+                      onChange={(e) => setSearchTermTree(e.target.value)}
+                      className="pl-10 h-11 rounded-xl bg-white dark:bg-zinc-950 border-zinc-200/80 dark:border-zinc-800"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                  {/* Visually Stunning Org Chart Tree Node View */}
-                  <div className="xl:col-span-8 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 rounded-2xl border border-zinc-150 dark:border-zinc-900 min-w-0 flex flex-col items-center">
-                    
-                    {/* Level 1: CEO / Agency Admin */}
-                    {organogramCeo && (
-                      <div className="flex flex-col items-center relative pb-8 w-full">
-                        <div 
-                          onClick={() => setSelectedTreeMember(organogramCeo)}
-                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 shadow-sm flex flex-col items-center text-center w-56 bg-card relative ${
-                            selectedTreeMember?.id === organogramCeo.id 
-                              ? 'border-brand-secondary scale-105 shadow-orange-500/10' 
-                              : 'border-zinc-200/80 hover:border-zinc-450 dark:border-zinc-800'
-                          } ${user.id === organogramCeo.id ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-                        >
-                          <div className="absolute -top-3.5 bg-brand-secondary text-[8px] font-black uppercase text-white px-2 py-0.5 rounded-full tracking-widest shadow">
-                            Agency Head
-                          </div>
-                          {organogramCeo.avatarUrl && (organogramCeo.avatarUrl.startsWith('http') || organogramCeo.avatarUrl.startsWith('/')) ? (
-                            <img src={organogramCeo.avatarUrl} alt={organogramCeo.name} referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover border border-zinc-200/60 dark:border-zinc-800 shadow" />
-                          ) : (
-                            <span className="text-3xl select-none">{organogramCeo.avatarUrl || '🦁'}</span>
-                          )}
-                          <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 mt-1.5">{organogramCeo.name}</span>
-                          <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">{organogramCeo.designation}</span>
-                          <span className="text-[9px] bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest mt-2">
-                            {organogramCeo.department}
-                          </span>
-                        </div>
-                        {/* vertical connector leading to department nodes */}
-                        <div className="w-[2px] h-8 bg-zinc-300 dark:bg-zinc-800 absolute bottom-0" />
-                      </div>
-                    )}
+                  {/* Grid layout containing flat teammate cards */}
+                  <div className="xl:col-span-8 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-5 rounded-2xl border border-zinc-150 dark:border-zinc-900 min-w-0">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1">
+                      {myTeamList
+                        .filter(u => {
+                          const s = searchTermTree.toLowerCase();
+                          return u.name.toLowerCase().includes(s) || 
+                                 u.designation.toLowerCase().includes(s) || 
+                                 u.department.toLowerCase().includes(s);
+                        })
+                        .map(member => {
+                          const loc = (member.workLocation || 'In Office').toLowerCase();
+                          const isHome = loc.includes('home');
+                          const isLeave = loc.includes('leave');
+                          const isAway = loc.includes('away');
+                          return (
+                            <div
+                              key={member.id}
+                              onClick={() => setSelectedTreeMember(member)}
+                              className={cn(
+                                "p-4 rounded-xl border cursor-pointer transition-all duration-300 bg-card flex flex-col justify-between relative group hover:shadow-md",
+                                selectedTreeMember?.id === member.id
+                                  ? "border-brand-secondary ring-1 ring-orange-500/20 bg-orange-500/5 dark:bg-orange-550/5"
+                                  : "border-zinc-200 hover:border-zinc-350 dark:border-zinc-800"
+                              )}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border shadow-inner flex items-center justify-center shrink-0 overflow-hidden text-xl font-bold font-mono">
+                                  {member.avatarUrl && (member.avatarUrl.startsWith('http') || member.avatarUrl.startsWith('/')) ? (
+                                    <img src={member.avatarUrl} alt={member.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <span>{member.avatarUrl || '👨‍💻'}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-brand-secondary transition-colors">
+                                    {member.name}
+                                  </h4>
+                                  <p className="text-[10px] text-zinc-455 dark:text-zinc-500 font-bold uppercase tracking-wider truncate">
+                                    {member.designation}
+                                  </p>
 
-                    {/* Hierarchy Subtitle with modern visual styling */}
-                    <div className="flex items-center space-x-2 my-4 text-xs">
-                      <div className="h-[1px] w-8 bg-zinc-200 dark:bg-zinc-800" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-                        Department Portals & Teams
-                      </span>
-                      <div className="h-[1px] w-8 bg-zinc-200 dark:bg-zinc-800" />
-                    </div>
-
-                    {/* Level 2 & 3: Department Blocks */}
-                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                      {[
-                        { name: 'Client Servicing', enum: Department.CLIENT_SERVICING, icon: '📈', color: 'border-orange-500/30 bg-orange-500/5 text-orange-600 dark:text-orange-400' },
-                        { name: 'Web Development', enum: Department.WEB_DEVELOPMENT, icon: '💻', color: 'border-blue-500/30 bg-blue-500/5 text-blue-600 dark:text-blue-400' },
-                        { name: 'Digital & Growth', enum: Department.DIGITAL, icon: '⚡', color: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400' },
-                        { name: 'HubSpot Operations', enum: Department.HUBSPOT, icon: '🛡️', color: 'border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-400' },
-                        { name: 'Content Strategy', enum: Department.CONTENT, icon: '✍️', color: 'border-purple-500/30 bg-purple-500/5 text-purple-600 dark:text-purple-400' },
-                        { name: 'Creative Design', enum: Department.DESIGN, icon: '🎨', color: 'border-pink-500/30 bg-pink-500/5 text-pink-600 dark:text-pink-400' },
-                        { name: 'Human Resources', enum: Department.HUMAN_RESOURCES, icon: '🌟', color: 'border-teal-500/30 bg-teal-500/5 text-teal-600 dark:text-teal-400' },
-                        { name: 'Pre-Sales & Outreach', enum: Department.SALES, icon: '🤝', color: 'border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400' }
-                      ].map(dept => {
-                        // Filter Leads/Managers of this department
-                        const deptManagers = organogramLeadsAndManagers.filter(u => u.department === dept.enum);
-                        // Filter Employees of this department
-                        const deptEmployees = organogramEmployees.filter(u => u.department === dept.enum);
-
-                        // If no one belongs to this department, we don't render it
-                        if (deptManagers.length === 0 && deptEmployees.length === 0) return null;
-
-                        return (
-                          <div 
-                            key={dept.enum} 
-                            className="p-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 flex flex-col space-y-4 shadow-sm relative group hover:border-zinc-350 dark:hover:border-zinc-750 transition-all duration-300"
-                          >
-                            {/* Department Heading Label */}
-                            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
-                              <div className="flex items-center space-x-1.5">
-                                <span className="text-sm select-none">{dept.icon}</span>
-                                <h4 className="text-xs font-black uppercase text-zinc-800 dark:text-zinc-200 tracking-wide">{dept.name}</h4>
-                              </div>
-                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${dept.color}`}>
-                                {deptManagers.length + deptEmployees.length} Members
-                              </span>
-                            </div>
-
-                            {/* Section: Leads & Managers (Fall under Amit) */}
-                            {deptManagers.length > 0 && (
-                              <div className="space-y-2">
-                                <span className="text-[8px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Leads & Managers</span>
-                                <div className="grid grid-cols-1 gap-2">
-                                  {deptManagers.map(m => (
-                                    <div 
-                                      key={m.id}
-                                      onClick={() => setSelectedTreeMember(m)}
-                                      className={`p-2.5 rounded-lg border cursor-pointer transition-all duration-300 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/20 ${
-                                        selectedTreeMember?.id === m.id 
-                                          ? 'border-brand-secondary bg-orange-500/5 dark:bg-orange-500/10' 
-                                          : 'border-zinc-100 hover:border-zinc-300 dark:border-zinc-800/60'
-                                      } ${user.id === m.id ? 'ring-1 ring-emerald-500' : ''}`}
-                                    >
-                                      <div className="flex items-center space-x-2.5 min-w-0">
-                                        {m.avatarUrl && (m.avatarUrl.startsWith('http') || m.avatarUrl.startsWith('/')) ? (
-                                          <img src={m.avatarUrl} alt={m.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-zinc-200/60 dark:border-zinc-800 shrink-0" />
-                                        ) : (
-                                          <span className="text-xl select-none shrink-0">{m.avatarUrl || '🦁'}</span>
-                                        )}
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{m.name}</p>
-                                          <p className="text-[9px] text-zinc-450 dark:text-zinc-500 uppercase tracking-wide truncate">{m.designation}</p>
-                                        </div>
-                                      </div>
-                                      <span className="text-[7.5px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded uppercase shrink-0 tracking-wider">
-                                        {m.role.includes('director') || m.designation.toLowerCase().includes('director') ? 'Director' : 'Lead'}
-                                      </span>
-                                    </div>
-                                  ))}
+                                  {/* Work Location indicator below designation */}
+                                  <div className="mt-1.5 shrink-0">
+                                    <span className={cn(
+                                      "inline-flex items-center text-[8px] font-extrabold uppercase tracking-wide py-0.5 px-2 rounded-full border shadow-sm",
+                                      isHome ? "bg-blue-500/5 text-blue-600 border-blue-500/10 dark:text-blue-400" :
+                                      isLeave ? "bg-rose-500/5 text-rose-600 border-rose-500/10 dark:text-rose-400" :
+                                      isAway ? "bg-zinc-500/5 text-zinc-550 border-zinc-500/10 dark:text-zinc-450" :
+                                      "bg-emerald-500/5 text-emerald-600 border-emerald-500/10 dark:text-emerald-400"
+                                    )}>
+                                      <span className={cn(
+                                        "w-1 h-1 rounded-full mr-1 shrink-0",
+                                        isHome ? "bg-blue-500" :
+                                        isLeave ? "bg-rose-500" :
+                                        isAway ? "bg-zinc-400" :
+                                        "bg-emerald-500"
+                                      )} />
+                                      {member.workLocation || 'In Office'}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            )}
 
-                            {/* Section: Respective Team Members / Employees (Fall under managers of that department) */}
-                            {deptEmployees.length > 0 && (
-                              <div className="pt-2">
-                                <span className="text-[8px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-2">
-                                  {deptManagers.length > 0 ? 'Respective Team under Manager' : 'Direct Support Team'}
+                              <div className="mt-4 pt-3 border-t border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between">
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5 rounded">
+                                  {member.department}
                                 </span>
-                                
-                                {/* Connective dashed thread representing reporting line under managers */}
-                                <div className="border-l border-dashed border-zinc-200 dark:border-zinc-800/80 ml-4 pl-3.5 space-y-2">
-                                  {deptEmployees.map(emp => (
-                                    <div 
-                                      key={emp.id}
-                                      onClick={() => setSelectedTreeMember(emp)}
-                                      className={`p-2 rounded-lg border cursor-pointer transition-all duration-300 flex items-center justify-between bg-card relative ${
-                                        selectedTreeMember?.id === emp.id 
-                                          ? 'border-brand-secondary bg-orange-500/5 dark:bg-orange-500/10 shadow-sm' 
-                                          : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-850/80'
-                                      } ${user.id === emp.id ? 'ring-1 ring-emerald-500' : ''}`}
-                                    >
-                                      {/* Left sub-node indicator dot */}
-                                      <div className="absolute -left-[19px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 border border-white dark:border-zinc-900" />
-                                      
-                                      <div className="flex items-center space-x-2 min-w-0">
-                                        {emp.avatarUrl && (emp.avatarUrl.startsWith('http') || emp.avatarUrl.startsWith('/')) ? (
-                                          <img src={emp.avatarUrl} alt={emp.name} referrerPolicy="no-referrer" className="w-7 h-7 rounded-lg object-cover border border-zinc-200/60 dark:border-zinc-800 shrink-0" />
-                                        ) : (
-                                          <span className="text-lg select-none shrink-0">{emp.avatarUrl || '🌟'}</span>
-                                        )}
-                                        <div className="min-w-0">
-                                          <p className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 truncate">{emp.name}</p>
-                                          <p className="text-[8.5px] text-zinc-450 dark:text-zinc-500 uppercase tracking-wide truncate">{emp.designation}</p>
-                                        </div>
-                                      </div>
-                                      <span className="text-[7.5px] font-semibold bg-zinc-100 text-zinc-550 dark:bg-zinc-800 dark:text-zinc-400 px-1 py-0.5 rounded uppercase tracking-wider shrink-0">
-                                        Team
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
+                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium font-mono truncate max-w-[120px]">
+                                  {member.email}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            </div>
+                          );
+                        })}
+                      {myTeamList.filter(u => {
+                        const s = searchTermTree.toLowerCase();
+                        return u.name.toLowerCase().includes(s) || 
+                               u.designation.toLowerCase().includes(s) || 
+                               u.department.toLowerCase().includes(s);
+                      }).length === 0 && (
+                        <div className="col-span-2 py-12 text-center text-zinc-455 text-xs">
+                          No colleagues match your current search terms.
+                        </div>
+                      )}
                     </div>
-
                   </div>
 
-                  {/* High Quality Node Drawer / Detail Side-Panel */}
+                  {/* High Quality Detail Side-Panel */}
                   <div className="xl:col-span-4 bg-zinc-50/50 dark:bg-zinc-900/40 p-4 border rounded-2xl space-y-4 border-zinc-200/60 dark:border-zinc-850">
                     <div className="text-center pb-4 border-b border-zinc-200/60 dark:border-zinc-800 space-y-2">
                       <div className="w-16 h-16 rounded-full bg-card shadow border-2 border-zinc-150 dark:border-zinc-800 flex items-center justify-center text-3xl mx-auto select-none overflow-hidden">
@@ -871,6 +788,28 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                           )}
                         </h4>
                         <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold uppercase tracking-wider">{selectedTreeMember?.designation}</p>
+                        
+                        {/* Work Location below designation in side panel */}
+                        {selectedTreeMember && (
+                          <div className="mt-1.5 flex justify-center">
+                            <span className={cn(
+                              "inline-flex items-center text-[8px] font-black uppercase tracking-wider py-0.5 px-2.5 rounded-full border shadow-sm",
+                              (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('home') ? "bg-blue-500/5 text-blue-600 border-blue-500/10 dark:text-blue-400" :
+                              (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('leave') ? "bg-rose-500/5 text-rose-600 border-rose-500/10 dark:text-rose-450" :
+                              (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('away') ? "bg-zinc-500/5 text-zinc-550 border-zinc-500/10 dark:text-zinc-405" :
+                              "bg-emerald-500/5 text-emerald-600 border-emerald-500/10 dark:text-emerald-400"
+                            )}>
+                              <span className={cn(
+                                "w-1 h-1 rounded-full mr-1.5 shrink-0",
+                                (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('home') ? "bg-blue-500" :
+                                (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('leave') ? "bg-rose-550" :
+                                (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('away') ? "bg-zinc-400" :
+                                "bg-emerald-500"
+                              )} />
+                              {selectedTreeMember.workLocation || 'In Office'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -901,23 +840,8 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                             >
                               {tag}
                             </span>
-                          )) || <span className="text-[10px] text-zinc-450 italic">None assigned</span>}
+                          )) || <span className="text-[10px] text-zinc-455 italic">None assigned</span>}
                         </div>
-                      </div>
-
-                      {/* Direct supervisor details to add visual reporting tree depth */}
-                      <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800">
-                        <span className="text-[9px] uppercase font-bold text-zinc-400 tracking-wider flex items-center">
-                          <CornerDownRight className="w-3 h-3 mr-1 text-orange-500" />
-                          Direct Supervisor Loop
-                        </span>
-                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 font-medium italic select-none">
-                          {selectedTreeMember?.id === ceo?.id 
-                            ? "Ultimate decision lead. Reports directly to the stakeholder governance board." 
-                            : selectedTreeMember?.id === director?.id 
-                            ? `Reports directly to CEO ${ceo?.name || "Company CEO"}.`
-                            : `Reports directly to Team Lead / Account Director ${director?.name || "Operations Lead"}.`}
-                        </p>
                       </div>
                     </div>
                   </div>

@@ -516,6 +516,12 @@ export function TaskEngine({
   });
 
   const filteredTasks = baseFilteredTasks.filter(t => {
+    // If any top level filter is explicitly applied, bypass the sub-tab category filter
+    // so the user can easily see their selected filter matches in full
+    if (filterProjectId || filterAssigneeId || filterStatus || filterPriority) {
+      return true;
+    }
+
     switch (filter) {
       case 'active':
         return [TaskStatus.IN_PROGRESS, TaskStatus.OPEN].includes(t.status as TaskStatus);

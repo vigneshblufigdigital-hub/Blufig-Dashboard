@@ -128,6 +128,27 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
     return u.role !== UserRole.CLIENT;
   });
 
+  // --- Full Agency Organogram Calculations ---
+  // Amit is the CEO. All leads & managers fall under Amit, and employees and respective teams come under managers.
+  // We exclude Client profiles in the organogram.
+  const allStaff = usersList.filter(u => u.role !== UserRole.CLIENT);
+  const organogramCeo = allStaff.find(u => u.role === UserRole.AGENCY_ADMIN) || allStaff.find(u => u.id === '001') || allStaff[0];
+
+  const organogramIsLeadOrManager = (u: UserProfile) => {
+    if (u.id === organogramCeo?.id) return false;
+    const r = (u.role || '').toLowerCase();
+    const d = (u.designation || '').toLowerCase();
+    return r.includes('lead') || r.includes('manager') || r.includes('director') ||
+           d.includes('lead') || d.includes('manager') || d.includes('director');
+  };
+
+  const organogramLeadsAndManagers = allStaff.filter(organogramIsLeadOrManager);
+  
+  const organogramEmployees = allStaff.filter(u => {
+    if (u.id === organogramCeo?.id) return false;
+    return !organogramIsLeadOrManager(u);
+  });
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Settings Navigation Sidebar */}
@@ -557,7 +578,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
               className="space-y-6"
             >
               <Card className="p-6 border-zinc-200/60 dark:border-zinc-800 shadow-md">
-                <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-6">
+                <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 mb-6 font-sans">
                   <h3 className="text-lg font-bold flex items-center">
                     <Layers className="w-5 h-5 mr-2 text-brand-secondary" />
                     Teammates Reporting Structure Organogram
@@ -569,131 +590,162 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                   {/* Visually Stunning Org Chart Tree Node View */}
-                  <div className="xl:col-span-8 bg-zinc-50 dark:bg-zinc-950 p-6 rounded-2xl border border-zinc-150 dark:border-zinc-900 overflow-x-auto min-w-0 flex flex-col items-center">
+                  <div className="xl:col-span-8 bg-zinc-50 dark:bg-zinc-950 p-4 sm:p-6 rounded-2xl border border-zinc-150 dark:border-zinc-900 min-w-0 flex flex-col items-center">
                     
-                    {/* Layer 1: CEO */}
-                    {ceo && (
-                      <div className="flex flex-col items-center relative pb-8">
+                    {/* Level 1: CEO / Agency Admin */}
+                    {organogramCeo && (
+                      <div className="flex flex-col items-center relative pb-8 w-full">
                         <div 
-                          onClick={() => setSelectedTreeMember(ceo)}
-                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all shadow-sm flex flex-col items-center text-center w-52 bg-card ${
-                            selectedTreeMember?.id === ceo.id 
-                              ? 'border-brand-secondary scale-105 shadow-orange-500/10 dark:bg-orange-950/10' 
+                          onClick={() => setSelectedTreeMember(organogramCeo)}
+                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 shadow-sm flex flex-col items-center text-center w-56 bg-card relative ${
+                            selectedTreeMember?.id === organogramCeo.id 
+                              ? 'border-brand-secondary scale-105 shadow-orange-500/10' 
                               : 'border-zinc-200/80 hover:border-zinc-450 dark:border-zinc-800'
-                          } ${user.id === ceo.id ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
+                          } ${user.id === organogramCeo.id ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
                         >
-                          {ceo.avatarUrl && (ceo.avatarUrl.startsWith('http') || ceo.avatarUrl.startsWith('/')) ? (
-                            <img src={ceo.avatarUrl} alt={ceo.name} referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover border border-zinc-200/60 dark:border-zinc-800 shadow" />
+                          <div className="absolute -top-3.5 bg-brand-secondary text-[8px] font-black uppercase text-white px-2 py-0.5 rounded-full tracking-widest shadow">
+                            Agency Head
+                          </div>
+                          {organogramCeo.avatarUrl && (organogramCeo.avatarUrl.startsWith('http') || organogramCeo.avatarUrl.startsWith('/')) ? (
+                            <img src={organogramCeo.avatarUrl} alt={organogramCeo.name} referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover border border-zinc-200/60 dark:border-zinc-800 shadow" />
                           ) : (
-                            <span className="text-3xl select-none">{ceo.avatarUrl || '🦁'}</span>
+                            <span className="text-3xl select-none">{organogramCeo.avatarUrl || '🦁'}</span>
                           )}
-                          <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 mt-1.5">{ceo.name}</span>
-                          <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">{ceo.designation}</span>
+                          <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 mt-1.5">{organogramCeo.name}</span>
+                          <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">{organogramCeo.designation}</span>
                           <span className="text-[9px] bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest mt-2">
-                            {ceo.department}
+                            {organogramCeo.department}
                           </span>
                         </div>
-                        {/* vertical connector */}
+                        {/* vertical connector leading to department nodes */}
                         <div className="w-[2px] h-8 bg-zinc-300 dark:bg-zinc-800 absolute bottom-0" />
                       </div>
                     )}
 
-                    {/* Layer 2: Account Director & Team Lead */}
-                    {director && (
-                      <div className="flex flex-col items-center relative py-4 pb-8">
-                        {/* vertical connector top */}
-                        <div className="w-[2px] h-4 bg-zinc-300 dark:bg-zinc-800 absolute top-0" />
-                        <div 
-                          onClick={() => setSelectedTreeMember(director)}
-                          className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all shadow-sm flex flex-col items-center text-center w-52 bg-card ${
-                            selectedTreeMember?.id === director.id 
-                              ? 'border-brand-secondary scale-105 shadow-orange-500/10 dark:bg-orange-950/10' 
-                              : 'border-zinc-200/80 hover:border-zinc-400 dark:border-zinc-800'
-                          } ${user.id === director.id ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-                        >
-                          {director.avatarUrl && (director.avatarUrl.startsWith('http') || director.avatarUrl.startsWith('/')) ? (
-                            <img src={director.avatarUrl} alt={director.name} referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover border border-zinc-200/60 dark:border-zinc-800 shadow" />
-                          ) : (
-                            <span className="text-3xl select-none">{director.avatarUrl || '⚡'}</span>
-                          )}
-                          <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 mt-1.5">{director.name}</span>
-                          <span className="text-[9px] text-zinc-450 dark:text-zinc-500 font-semibold uppercase tracking-wider mt-0.5 line-clamp-1">{director.designation}</span>
-                          <span className="text-[9px] bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-extrabold uppercase mt-1.5">
-                            {director.department}
-                          </span>
-                        </div>
-                        {/* vertical connector bottom */}
-                        <div className="w-[2px] h-8 bg-zinc-300 dark:bg-zinc-800 absolute bottom-0" />
-                      </div>
-                    )}
+                    {/* Hierarchy Subtitle with modern visual styling */}
+                    <div className="flex items-center space-x-2 my-4 text-xs">
+                      <div className="h-[1px] w-8 bg-zinc-200 dark:bg-zinc-800" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                        Department Portals & Teams
+                      </span>
+                      <div className="h-[1px] w-8 bg-zinc-200 dark:bg-zinc-800" />
+                    </div>
 
-                    {/* Layer 3: Account Managers & Digital Leads */}
-                    <div className="relative pt-4 w-full flex flex-col items-center">
-                      {/* Horizontal bar linking managers */}
-                      <div className="absolute top-0 left-12 right-12 h-[2px] bg-zinc-300 dark:bg-zinc-800" />
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full pt-4">
-                        {managers.map(m => (
-                          <div key={m.id} className="flex flex-col items-center relative">
-                            {/* Short vertical bar from horizontal connector */}
-                            <div className="w-[2px] h-4 bg-zinc-300 dark:bg-zinc-800 absolute -top-4" />
-                            
-                            <div 
-                              onClick={() => setSelectedTreeMember(m)}
-                              className={`p-3 rounded-xl border-2 cursor-pointer transition-all shadow-sm flex flex-col items-center text-center w-full bg-card ${
-                                selectedTreeMember?.id === m.id 
-                                  ? 'border-brand-secondary scale-[1.03] shadow-orange-500/10 dark:bg-orange-950/10' 
-                                  : 'border-zinc-200/80 hover:border-zinc-400 dark:border-zinc-800'
-                              } ${user.id === m.id ? 'ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-                            >
-                              {m.avatarUrl && (m.avatarUrl.startsWith('http') || m.avatarUrl.startsWith('/')) ? (
-                                <img src={m.avatarUrl} alt={m.name} referrerPolicy="no-referrer" className="w-10 h-10 rounded-xl object-cover border border-zinc-200/60 dark:border-zinc-800 shadow" />
-                              ) : (
-                                <span className="text-2xl select-none">{m.avatarUrl || '💼'}</span>
-                              )}
-                              <span className="text-xs font-extrabold text-zinc-900 dark:text-zinc-100 mt-1 line-clamp-1">{m.name}</span>
-                              <span className="text-[8px] text-zinc-400 dark:text-zinc-500 font-semibold uppercase mt-0.5 leading-none line-clamp-1">{m.designation}</span>
-                              <span className="text-[8px] bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/10 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide mt-2">
-                                {m.department}
+                    {/* Level 2 & 3: Department Blocks */}
+                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                      {[
+                        { name: 'Client Servicing', enum: Department.CLIENT_SERVICING, icon: '📈', color: 'border-orange-500/30 bg-orange-500/5 text-orange-600 dark:text-orange-400' },
+                        { name: 'Web Development', enum: Department.WEB_DEVELOPMENT, icon: '💻', color: 'border-blue-500/30 bg-blue-500/5 text-blue-600 dark:text-blue-400' },
+                        { name: 'Digital & Growth', enum: Department.DIGITAL, icon: '⚡', color: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400' },
+                        { name: 'HubSpot Operations', enum: Department.HUBSPOT, icon: '🛡️', color: 'border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-400' },
+                        { name: 'Content Strategy', enum: Department.CONTENT, icon: '✍️', color: 'border-purple-500/30 bg-purple-500/5 text-purple-600 dark:text-purple-400' },
+                        { name: 'Creative Design', enum: Department.DESIGN, icon: '🎨', color: 'border-pink-500/30 bg-pink-500/5 text-pink-600 dark:text-pink-400' },
+                        { name: 'Human Resources', enum: Department.HUMAN_RESOURCES, icon: '🌟', color: 'border-teal-500/30 bg-teal-500/5 text-teal-600 dark:text-teal-400' },
+                        { name: 'Pre-Sales & Outreach', enum: Department.SALES, icon: '🤝', color: 'border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400' }
+                      ].map(dept => {
+                        // Filter Leads/Managers of this department
+                        const deptManagers = organogramLeadsAndManagers.filter(u => u.department === dept.enum);
+                        // Filter Employees of this department
+                        const deptEmployees = organogramEmployees.filter(u => u.department === dept.enum);
+
+                        // If no one belongs to this department, we don't render it
+                        if (deptManagers.length === 0 && deptEmployees.length === 0) return null;
+
+                        return (
+                          <div 
+                            key={dept.enum} 
+                            className="p-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 flex flex-col space-y-4 shadow-sm relative group hover:border-zinc-350 dark:hover:border-zinc-750 transition-all duration-300"
+                          >
+                            {/* Department Heading Label */}
+                            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-sm select-none">{dept.icon}</span>
+                                <h4 className="text-xs font-black uppercase text-zinc-800 dark:text-zinc-200 tracking-wide">{dept.name}</h4>
+                              </div>
+                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${dept.color}`}>
+                                {deptManagers.length + deptEmployees.length} Members
                               </span>
                             </div>
 
-                            {/* Small connector down to specialists */}
-                            <div className="w-[2px] h-3 bg-zinc-200 dark:bg-zinc-800 mt-1" />
-                            <div className="w-[2px] h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                            {/* Section: Leads & Managers (Fall under Amit) */}
+                            {deptManagers.length > 0 && (
+                              <div className="space-y-2">
+                                <span className="text-[8px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Leads & Managers</span>
+                                <div className="grid grid-cols-1 gap-2">
+                                  {deptManagers.map(m => (
+                                    <div 
+                                      key={m.id}
+                                      onClick={() => setSelectedTreeMember(m)}
+                                      className={`p-2.5 rounded-lg border cursor-pointer transition-all duration-300 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/20 ${
+                                        selectedTreeMember?.id === m.id 
+                                          ? 'border-brand-secondary bg-orange-500/5 dark:bg-orange-500/10' 
+                                          : 'border-zinc-100 hover:border-zinc-300 dark:border-zinc-800/60'
+                                      } ${user.id === m.id ? 'ring-1 ring-emerald-500' : ''}`}
+                                    >
+                                      <div className="flex items-center space-x-2.5 min-w-0">
+                                        {m.avatarUrl && (m.avatarUrl.startsWith('http') || m.avatarUrl.startsWith('/')) ? (
+                                          <img src={m.avatarUrl} alt={m.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-zinc-200/60 dark:border-zinc-800 shrink-0" />
+                                        ) : (
+                                          <span className="text-xl select-none shrink-0">{m.avatarUrl || '🦁'}</span>
+                                        )}
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{m.name}</p>
+                                          <p className="text-[9px] text-zinc-450 dark:text-zinc-500 uppercase tracking-wide truncate">{m.designation}</p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[7.5px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded uppercase shrink-0 tracking-wider">
+                                        {m.role.includes('director') || m.designation.toLowerCase().includes('director') ? 'Director' : 'Lead'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                    {/* Specialists Rail */}
-                    <div className="w-full mt-6 pt-4 border-t border-dashed border-zinc-200 dark:border-zinc-800">
-                      <div className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400 mb-3 text-center">Digital Specialists & Business Outreach</div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
-                        {digitalAndSales.map(spec => (
-                          <div 
-                            key={spec.id}
-                            onClick={() => setSelectedTreeMember(spec)}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center space-x-2 bg-card ${
-                              selectedTreeMember?.id === spec.id 
-                                ? 'border-brand-secondary shadow' 
-                                : 'border-zinc-200/60 dark:border-zinc-800 hover:bg-zinc-55 dark:hover:bg-zinc-900/40'
-                            } ${user.id === spec.id ? 'ring-2 ring-emerald-500' : ''}`}
-                          >
-                            <div className="shrink-0 select-none">
-                              {spec.avatarUrl && (spec.avatarUrl.startsWith('http') || spec.avatarUrl.startsWith('/')) ? (
-                                <img src={spec.avatarUrl} alt={spec.name} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-zinc-200/60 dark:border-zinc-800" />
-                              ) : (
-                                <span className="text-xl">{spec.avatarUrl || '🌟'}</span>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 truncate">{spec.name}</p>
-                              <p className="text-[8px] text-zinc-400 dark:text-zinc-500 truncate leading-none mt-0.5 uppercase">{spec.designation}</p>
-                            </div>
+                            {/* Section: Respective Team Members / Employees (Fall under managers of that department) */}
+                            {deptEmployees.length > 0 && (
+                              <div className="pt-2">
+                                <span className="text-[8px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-2">
+                                  {deptManagers.length > 0 ? 'Respective Team under Manager' : 'Direct Support Team'}
+                                </span>
+                                
+                                {/* Connective dashed thread representing reporting line under managers */}
+                                <div className="border-l border-dashed border-zinc-200 dark:border-zinc-800/80 ml-4 pl-3.5 space-y-2">
+                                  {deptEmployees.map(emp => (
+                                    <div 
+                                      key={emp.id}
+                                      onClick={() => setSelectedTreeMember(emp)}
+                                      className={`p-2 rounded-lg border cursor-pointer transition-all duration-300 flex items-center justify-between bg-card relative ${
+                                        selectedTreeMember?.id === emp.id 
+                                          ? 'border-brand-secondary bg-orange-500/5 dark:bg-orange-500/10 shadow-sm' 
+                                          : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-850/80'
+                                      } ${user.id === emp.id ? 'ring-1 ring-emerald-500' : ''}`}
+                                    >
+                                      {/* Left sub-node indicator dot */}
+                                      <div className="absolute -left-[19px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 border border-white dark:border-zinc-900" />
+                                      
+                                      <div className="flex items-center space-x-2 min-w-0">
+                                        {emp.avatarUrl && (emp.avatarUrl.startsWith('http') || emp.avatarUrl.startsWith('/')) ? (
+                                          <img src={emp.avatarUrl} alt={emp.name} referrerPolicy="no-referrer" className="w-7 h-7 rounded-lg object-cover border border-zinc-200/60 dark:border-zinc-800 shrink-0" />
+                                        ) : (
+                                          <span className="text-lg select-none shrink-0">{emp.avatarUrl || '🌟'}</span>
+                                        )}
+                                        <div className="min-w-0">
+                                          <p className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 truncate">{emp.name}</p>
+                                          <p className="text-[8.5px] text-zinc-450 dark:text-zinc-500 uppercase tracking-wide truncate">{emp.designation}</p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[7.5px] font-semibold bg-zinc-100 text-zinc-550 dark:bg-zinc-800 dark:text-zinc-400 px-1 py-0.5 rounded uppercase tracking-wider shrink-0">
+                                        Team
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
 
                   </div>

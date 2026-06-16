@@ -83,4 +83,4 @@ The project includes pre-configured `firestore.rules` that enforce:
 - Identity verification.
 
 ---
-Built by Blufig Digital.
+Built with Google AI Studio Build.

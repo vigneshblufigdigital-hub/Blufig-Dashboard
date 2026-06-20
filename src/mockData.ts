@@ -298,7 +298,8 @@ export const MOCK_PROJECTS: Project[] = [
     accountManagerId: '130',
     type: ProjectType.RETAINER,
     status: 'Active',
-    startDate: '2024-01-01'
+    startDate: '2024-01-01',
+    websiteUrl: 'https://acme.org'
   },
   {
     id: 'p2',
@@ -307,7 +308,8 @@ export const MOCK_PROJECTS: Project[] = [
     accountManagerId: '072',
     type: ProjectType.ONE_OFF,
     status: 'Active',
-    startDate: '2024-03-15'
+    startDate: '2024-03-15',
+    websiteUrl: 'https://globex.co'
   },
   {
     id: 'p3',
@@ -316,7 +318,8 @@ export const MOCK_PROJECTS: Project[] = [
     accountManagerId: '130',
     type: ProjectType.RETAINER,
     status: 'Active',
-    startDate: '2024-02-10'
+    startDate: '2024-02-10',
+    websiteUrl: 'https://blackmesa.gov'
   }
 ];
 

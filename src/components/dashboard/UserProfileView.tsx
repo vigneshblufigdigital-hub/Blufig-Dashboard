@@ -309,22 +309,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-2">
-                    <Label htmlFor="prof-url" className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center justify-between">
-                      <span>Or Provide Custom Avatar URL</span>
-                      <span className="text-[10px] text-zinc-400 lowercase font-medium">Supports external secure image addresses</span>
-                    </Label>
-                    <Input 
-                      id="prof-url"
-                      type="url"
-                      value={customAvatarUrl}
-                      onChange={(e) => {
-                        setCustomAvatarUrl(e.target.value);
-                      }}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono text-xs bg-white dark:bg-zinc-950"
-                      placeholder="e.g. https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100"
-                    />
-                  </div>
+
 
                   <div className="space-y-3 pt-2">
                     <Label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">

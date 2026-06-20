@@ -28,7 +28,9 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  AlarmClock,
+  BellRing
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -79,6 +81,8 @@ interface TaskEngineProps {
   setElapsedTimes: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   formatTime: (seconds: number) => string;
   toggleTimer: (taskId: string, e?: any) => void;
+  highlightedTaskId?: string | null;
+  setHighlightedTaskId?: (id: string | null) => void;
 }
 
 export function TaskEngine({ 
@@ -99,12 +103,79 @@ export function TaskEngine({
   elapsedTimes,
   setElapsedTimes,
   formatTime,
-  toggleTimer
+  toggleTimer,
+  highlightedTaskId,
+  setHighlightedTaskId
 }: TaskEngineProps) {
   const { user } = useAuth();
   const [filter, setFilter] = useState('active');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  
+  // AI status summary states
+  const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+
+  const handleGenerateSummary = async () => {
+    setIsGeneratingSummary(true);
+    setAiSummary(null);
+    setIsSummaryDialogOpen(true);
+    try {
+      const response = await fetch("/api/tasks/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tasks,
+          projects,
+          users,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to generate report summary");
+      }
+
+      const data = await response.json();
+      setAiSummary(data.summary);
+      toast.success("AI status summary generated successfully! Sparkles ✨");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to generate AI status summary.");
+      setIsSummaryDialogOpen(false);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+  
+  // Listen to highlightedTaskId prop to auto-expand, switch tab mode, and auto-scroll
+  React.useEffect(() => {
+    if (highlightedTaskId) {
+      setViewMode('list');
+      setExpandedTasks(prev => prev.includes(highlightedTaskId) ? prev : [...prev, highlightedTaskId]);
+      
+      const timer = setTimeout(() => {
+        const rowEl = document.getElementById(`task-row-${highlightedTaskId}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+
+      // Reset selection after 4 seconds to enable re-clicking of the same notification
+      const resetTimer = setTimeout(() => {
+        if (setHighlightedTaskId) {
+          setHighlightedTaskId(null);
+        }
+      }, 4000);
+
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(resetTimer);
+      };
+    }
+  }, [highlightedTaskId, setHighlightedTaskId]);
   
   // Drag and Drop State
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -583,6 +654,43 @@ export function TaskEngine({
     setTasks(prev => prev.filter(t => t.id !== taskId));
   };
 
+  const isUpcomingDeadline = (dueDateStr?: string): boolean => {
+    if (!dueDateStr) return false;
+    const dueDate = new Date(dueDateStr);
+    if (isNaN(dueDate.getTime())) return false;
+    
+    const now = new Date();
+    const diffTime = dueDate.getTime() - now.getTime();
+    const diffHours = diffTime / (1000 * 60 * 60);
+    // Upcoming within 48 hours (we include a 12 hour window in the past to catch overdue active tasks for today)
+    return diffHours <= 48 && diffHours >= -12;
+  };
+
+  const handleSnoozeTask = (taskId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+      
+      const baseDate = t.dueDate ? new Date(t.dueDate) : new Date();
+      baseDate.setDate(baseDate.getDate() + 1);
+      const newDueDate = baseDate.toISOString().split('T')[0];
+      
+      toast.success(`Task "${t.name}" successfully snoozed for 24 hours.`, {
+        description: `New deadline: ${newDueDate}`,
+        icon: '⏰'
+      });
+      
+      return {
+        ...t,
+        dueDate: newDueDate,
+        updatedAt: new Date().toISOString()
+      };
+    }));
+  };
+
   const completeWorkflowStep = (taskId: string, stepId: string) => {
     setTasks(prevTasks => {
       return prevTasks.map(task => {
@@ -774,6 +882,138 @@ export function TaskEngine({
         </div>
       )}
 
+      {/* Bulk Actions Panel */}
+      <AnimatePresence>
+        {selectedTaskIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 12 }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 text-zinc-900 dark:text-zinc-100 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-md">
+              <div className="flex items-center space-x-2.5">
+                <div className="bg-amber-500 text-white font-extrabold text-xs rounded-full p-1.5 h-6 w-6 flex items-center justify-center animate-bounce">
+                  {selectedTaskIds.length}
+                </div>
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                  Bulk Actions for selected tasks
+                </p>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Set status dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] font-black uppercase tracking-wider h-8 bg-white dark:bg-zinc-900 border-zinc-250 hover:bg-zinc-50 hover:border-zinc-400 cursor-pointer text-zinc-700 dark:text-zinc-300"
+                      />
+                    }
+                  >
+                    Set Status
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44 border-zinc-200 dark:border-zinc-800 space-y-1">
+                    {Object.values(TaskStatus).map((statusVal) => (
+                      <DropdownMenuItem
+                        key={statusVal}
+                        onClick={() => {
+                          setTasks(prev => prev.map(t => {
+                            if (!selectedTaskIds.includes(t.id)) return t;
+                            return {
+                              ...t,
+                              status: statusVal,
+                              updatedAt: new Date().toISOString()
+                            };
+                          }));
+                          toast.success(`Successfully moved ${selectedTaskIds.length} tasks to ${statusVal}! 📊`);
+                          setSelectedTaskIds([]);
+                        }}
+                        className="text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                      >
+                        {statusVal}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Update Priority Selector / Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[10px] font-black uppercase tracking-wider h-8 bg-white dark:bg-zinc-900 border-zinc-250 hover:bg-zinc-50 hover:border-zinc-400 cursor-pointer text-zinc-700 dark:text-zinc-300"
+                      />
+                    }
+                  >
+                    Set Priority
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40 border-zinc-200 dark:border-zinc-800 space-y-1">
+                    {Object.values(Priority).map((priorityVal) => (
+                      <DropdownMenuItem
+                        key={priorityVal}
+                        onClick={() => {
+                          setTasks(prev => prev.map(t => {
+                            if (!selectedTaskIds.includes(t.id)) return t;
+                            return {
+                              ...t,
+                              priority: priorityVal,
+                              updatedAt: new Date().toISOString()
+                            };
+                          }));
+                          toast.success(`Updated priority of ${selectedTaskIds.length} tasks to ${priorityVal}! ⚡`);
+                          setSelectedTaskIds([]);
+                        }}
+                        className="text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                      >
+                        {priorityVal}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Snooze selected */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTasks(prev => prev.map(t => {
+                      if (!selectedTaskIds.includes(t.id)) return t;
+                      const baseDate = t.dueDate ? new Date(t.dueDate) : new Date();
+                      baseDate.setDate(baseDate.getDate() + 1);
+                      return {
+                        ...t,
+                        dueDate: baseDate.toISOString().split('T')[0],
+                        updatedAt: new Date().toISOString()
+                      };
+                    }));
+                    toast.success(`Snoozed ${selectedTaskIds.length} tasks for 24 hours! ⏰`);
+                    setSelectedTaskIds([]);
+                  }}
+                  className="text-[10px] font-black uppercase tracking-wider h-8 bg-white dark:bg-zinc-900 border-zinc-250 hover:bg-zinc-50 hover:border-zinc-400 cursor-pointer text-zinc-700 dark:text-zinc-300"
+                >
+                  Bulk Snooze 24h
+                </Button>
+
+                {/* Clear selected */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedTaskIds([])}
+                  className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-300 h-8 cursor-pointer"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 border-b border-zinc-100 dark:border-zinc-800">
         {viewMode === 'list' ? (
           <div className="flex items-center space-x-4 sm:space-x-6 text-xs sm:text-sm font-medium overflow-x-auto whitespace-nowrap scrollbar-none pb-1 sm:pb-0">
@@ -857,6 +1097,86 @@ export function TaskEngine({
               <span>Board</span>
             </Button>
           </div>
+
+          {/* AI Status Summary Button */}
+          <Button
+            size="sm"
+            onClick={handleGenerateSummary}
+            className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 rounded-xl px-4 h-10 font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer flex items-center shrink-0"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            AI Status Summary
+          </Button>
+
+          {/* AI Status Summary Dialog */}
+          <Dialog open={isSummaryDialogOpen} onOpenChange={setIsSummaryDialogOpen}>
+            <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+              <DialogHeader className="pb-4 border-b border-zinc-100 dark:border-zinc-900">
+                <DialogTitle className="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center space-x-2.5">
+                  <div className="bg-amber-505/10 text-amber-600 dark:text-amber-400 p-2 rounded-xl">
+                    <Sparkles className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <span>AI Ops Status & Progress Summary</span>
+                </DialogTitle>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  Real-time intelligence report generated from active tasks, milestones, and workloads.
+                </p>
+              </DialogHeader>
+
+              <div className="flex-1 py-4 overflow-y-auto min-h-[300px] flex flex-col">
+                {isGeneratingSummary ? (
+                  <div className="flex-1 flex flex-col items-center justify-center space-y-4 py-12">
+                    <div className="relative">
+                      <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-1.5">
+                      <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Processing Workspace Intelligence...</p>
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-sm">
+                        Analyzing open projects, pending timelines, team priorities, and potential bottlenecks.
+                      </p>
+                    </div>
+                  </div>
+                ) : aiSummary ? (
+                  <div className="whitespace-pre-wrap font-sans text-xs tracking-wide leading-relaxed text-zinc-700 dark:text-zinc-300 p-5 bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-850 rounded-2xl overflow-y-auto max-h-[55vh] shadow-inner selection:bg-amber-200 selection:text-amber-900">
+                    {aiSummary}
+                  </div>
+                ) : (
+                  <div className="text-center text-zinc-500 py-12">
+                    No summary loaded.
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-900/20 -mx-6 -mb-6 p-6 rounded-b-2xl">
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                  {aiSummary && "Generated using Gemini 3.5 AI Engine"}
+                </div>
+                <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsSummaryDialogOpen(false)}
+                    className="border-zinc-250 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-xl px-4 h-10 font-bold text-[10px] uppercase tracking-widest cursor-pointer"
+                  >
+                    Close
+                  </Button>
+                  {aiSummary && (
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(aiSummary);
+                        toast.success("Summary report copied to clipboard! 📋");
+                      }}
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 border border-transparent rounded-xl px-4 h-10 font-bold text-[10px] uppercase tracking-widest cursor-pointer inline-flex items-center"
+                    >
+                      Copy Report
+                    </Button>
+                  )}
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger 
@@ -1215,7 +1535,25 @@ export function TaskEngine({
           <Table>
             <TableHeader className="bg-zinc-50/50 dark:bg-zinc-900/30">
               <TableRow>
-                <TableHead className="w-[40px]"></TableHead>
+                <TableHead className="w-[85px] py-4 pl-4 align-middle">
+                  <div className="flex items-center space-x-2.5">
+                    <Checkbox 
+                      checked={filteredTasks.length > 0 && filteredTasks.every(t => selectedTaskIds.includes(t.id))}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedTaskIds(prev => {
+                            const newlySelected = filteredTasks.map(t => t.id);
+                            return Array.from(new Set([...prev, ...newlySelected]));
+                          });
+                        } else {
+                          setSelectedTaskIds(prev => prev.filter(id => !filteredTasks.some(t => t.id === id)));
+                        }
+                      }}
+                      className="brand-checkbox"
+                    />
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Sel</span>
+                  </div>
+                </TableHead>
                 <TableHead className="w-[300px] text-[10px] uppercase font-bold tracking-widest py-4">Task Name</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold tracking-widest py-4">Assignee</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold tracking-widest py-4">Status</TableHead>
@@ -1229,7 +1567,7 @@ export function TaskEngine({
             <TableBody>
               {filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-zinc-500 font-medium italic text-sm">
+                  <TableCell colSpan={9} className="h-32 text-center text-zinc-500 font-medium italic text-sm">
                     No tasks found in this category.
                   </TableCell>
                 </TableRow>
@@ -1239,10 +1577,12 @@ export function TaskEngine({
                 const isExpanded = expandedTasks.includes(task.id);
                 const subtaskCount = task.subTasks?.length || 0;
                 const completedCount = task.subTasks?.filter(st => st.isCompleted).length || 0;
+                const isUpcoming = isUpcomingDeadline(task.dueDate) && ![TaskStatus.DONE, TaskStatus.APPROVED, TaskStatus.CANCELLED].includes(task.status as TaskStatus);
                 
                 return (
                   <React.Fragment key={task.id}>
                   <TableRow 
+                    id={`task-row-${task.id}`}
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragOver={(e) => handleDragOver(e, task.id)}
@@ -1250,15 +1590,33 @@ export function TaskEngine({
                     onDragEnd={handleDragEnd}
                     onDrop={(e) => handleDropOnTask(e, task.id)}
                     className={cn(
-                      "group transition-colors cursor-pointer border-zinc-50 dark:border-zinc-900",
+                      "group transition-all cursor-pointer border-zinc-50 dark:border-zinc-900",
                       isExpanded ? "bg-zinc-50/50 dark:bg-zinc-900/40" : "hover:bg-zinc-50/80 dark:hover:bg-zinc-900/20",
                       draggedTaskId === task.id && "opacity-40 bg-zinc-100 dark:bg-zinc-800",
-                      draggedOverTaskId === task.id && "border-t border-t-brand-secondary bg-brand-secondary/5"
+                      draggedOverTaskId === task.id && "border-t border-t-brand-secondary bg-brand-secondary/5",
+                      task.id === highlightedTaskId && "ring-2 ring-orange-500 bg-orange-500/5 dark:bg-orange-550/5 transition-all scale-[1.01]",
+                      isUpcoming && "animate-pulse-amber ring-1 ring-amber-500/35 bg-amber-50/5 dark:bg-amber-950/5"
                     )}
                     onClick={() => toggleExpand(task.id)}
                   >
-                    <TableCell className="py-4">
-                      {isExpanded ? <ChevronDown className="w-4 h-4 text-zinc-400" /> : <ChevronRight className="w-4 h-4 text-zinc-400" />}
+                    <TableCell className="py-4 pl-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center space-x-3.5">
+                        <Checkbox 
+                          checked={selectedTaskIds.includes(task.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedTaskIds(prev => 
+                              checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
+                            );
+                          }}
+                          className="brand-checkbox"
+                        />
+                        <button 
+                          onClick={() => toggleExpand(task.id)}
+                          className="text-zinc-400 hover:text-zinc-650 transition-colors cursor-pointer"
+                        >
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </TableCell>
                     <TableCell className="py-4">
                       <div className="flex flex-col">
@@ -1350,10 +1708,26 @@ export function TaskEngine({
                         {task.timeEstimate ? `${task.timeEstimate}h` : '—'}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center text-xs font-medium text-zinc-500">
-                        <Clock className="w-3 h-3 mr-1.5 text-zinc-400" />
-                        {task.dueDate}
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center text-xs font-semibold text-zinc-650">
+                          <Clock className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
+                          <span>{task.dueDate}</span>
+                        </div>
+                        {isUpcoming && (
+                          <Badge variant="outline" className="text-[9px] font-black uppercase text-amber-500 border-amber-500/40 bg-amber-500/5 px-1.5 py-0 select-none animate-pulse shrink-0">
+                            Due Soon
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost" 
+                          size="icon"
+                          className="h-6 w-6 text-zinc-400 hover:text-amber-500 hover:bg-amber-100/10 focus:text-amber-500 rounded-md shrink-0 cursor-pointer"
+                          title="Snooze 24 hours"
+                          onClick={(e) => handleSnoozeTask(task.id, e)}
+                        >
+                          <AlarmClock className="w-3 h-3" />
+                        </Button>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1415,7 +1789,7 @@ export function TaskEngine({
                   <AnimatePresence>
                     {isExpanded && (
                       <TableRow className="border-none hover:bg-transparent">
-                        <TableCell colSpan={8} className="p-0 border-none">
+                        <TableCell colSpan={9} className="p-0 border-none">
                           <motion.div 
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
@@ -1698,6 +2072,7 @@ export function TaskEngine({
                       const isExpanded = expandedTasks.includes(task.id);
                       const subtaskCount = task.subTasks?.length || 0;
                       const completedCount = task.subTasks?.filter(st => st.isCompleted).length || 0;
+                      const isUpcoming = isUpcomingDeadline(task.dueDate) && ![TaskStatus.DONE, TaskStatus.APPROVED, TaskStatus.CANCELLED].includes(task.status as TaskStatus);
 
                       return (
                         <div
@@ -1712,14 +2087,27 @@ export function TaskEngine({
                           className={cn(
                             "bg-white dark:bg-zinc-90 w-full border border-zinc-200/60 dark:border-zinc-800 p-4 rounded-xl shadow-sm transition-all duration-150 cursor-pointer hover:shadow-md hover:scale-[1.01] hover:border-zinc-300 dark:hover:border-zinc-700",
                             draggedTaskId === task.id && "opacity-45 scale-[0.98] border-dashed border-zinc-300 dark:border-zinc-700",
-                            draggedOverTaskId === task.id && "border-t-2 border-brand-secondary pt-2 bg-brand-secondary/5 dark:bg-brand-secondary/10"
+                            draggedOverTaskId === task.id && "border-t-2 border-brand-secondary pt-2 bg-brand-secondary/5 dark:bg-brand-secondary/10",
+                            isUpcoming && "animate-pulse-amber border-amber-500 dark:border-amber-500 ring-1 ring-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
                           )}
                         >
                           {/* Card Header Tag & Priority */}
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest truncate max-w-40">
-                              {project?.name || 'Global'}
-                            </span>
+                          <div className="flex items-center justify-between gap-2 mb-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`board-checkbox-${task.id}`}
+                                checked={selectedTaskIds.includes(task.id)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedTaskIds(prev => 
+                                    checked ? [...prev, task.id] : prev.filter(id => id !== task.id)
+                                  );
+                                }}
+                                className="brand-checkbox scale-90"
+                              />
+                              <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest truncate max-w-32">
+                                {project?.name || 'Global'}
+                              </span>
+                            </div>
                             <div className="flex items-center space-x-1.5 shrink-0">
                               <span className={cn(
                                 "w-1.5 h-1.5 rounded-full",
@@ -1730,6 +2118,26 @@ export function TaskEngine({
                               </span>
                             </div>
                           </div>
+
+                          {/* Alert Bar for Upcoming Due Dates */}
+                          {isUpcoming && (
+                            <div className="flex items-center justify-between p-2 mb-3 bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 rounded-md animate-[pulse_2s_infinite] select-none shadow-sm" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center space-x-1.5 text-[9px] font-black uppercase tracking-wider">
+                                <BellRing className="w-3.5 h-3.5 text-amber-550 dark:text-amber-400 shrink-0" />
+                                <span>Due soon (&lt; 48h)</span>
+                              </div>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="h-5 px-1.5 text-[8px] font-extrabold uppercase tracking-widest bg-white dark:bg-zinc-900 border-amber-500/60 text-amber-600 dark:text-amber-400 hover:bg-amber-550 hover:text-white hover:border-amber-500 shrink-0 cursor-pointer rounded-md"
+                                onClick={(e) => handleSnoozeTask(task.id, e)}
+                                title="Delay by 24 hours"
+                              >
+                                <AlarmClock className="w-2.5 h-2.5 mr-1" />
+                                Snooze
+                              </Button>
+                            </div>
+                          )}
 
                           {/* Card Main Title */}
                           <div 
@@ -2046,6 +2454,20 @@ export function TaskEngine({
                                 )}
                               </Button>
 
+                              {/* Quick-action Snooze Button */}
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-7 w-7 rounded-lg transition-all cursor-pointer bg-zinc-50 dark:bg-zinc-805 hover:bg-amber-100 dark:hover:bg-amber-950 text-amber-600 dark:text-amber-400 border border-transparent hover:border-amber-200 dark:hover:border-amber-900"
+                                title="Snooze for 24 hours"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSnoozeTask(task.id, e);
+                                }}
+                              >
+                                <AlarmClock className="w-3.5 h-3.5" />
+                              </Button>
+
                               {/* More Dropdown Trigger */}
                               <DropdownMenu>
                                 <DropdownMenuTrigger
@@ -2078,6 +2500,17 @@ export function TaskEngine({
                                       {task.status === status && <span className="text-[10px]">✓</span>}
                                     </DropdownMenuItem>
                                   ))}
+                                  <div className="h-[1px] bg-zinc-100 dark:bg-zinc-850 my-1" />
+                                  <DropdownMenuItem 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSnoozeTask(task.id, e);
+                                    }}
+                                    className="text-xs font-bold uppercase tracking-widest cursor-pointer text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950"
+                                  >
+                                    <AlarmClock className="w-3.5 h-3.5 mr-2 text-amber-550" />
+                                    Snooze 24h
+                                  </DropdownMenuItem>
                                   <div className="h-[1px] bg-zinc-100 dark:bg-zinc-850 my-1" />
                                   <DropdownMenuItem 
                                     variant="destructive"
@@ -2131,9 +2564,20 @@ export function TaskEngine({
                     <Badge variant="outline" className="text-[10px] font-bold border-zinc-200 bg-zinc-50 dark:bg-zinc-900/25 text-zinc-500">
                       {task.type}
                     </Badge>
-                    <span className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">
-                      Due: {task.dueDate || 'No Due Date'}
-                    </span>
+                    <div className="flex items-center space-x-1.5 bg-zinc-100/50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/80 rounded-lg px-2 py-0.5 ml-auto">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium whitespace-nowrap">
+                        Due: {task.dueDate || 'No Due Date'}
+                      </span>
+                      <Button
+                        variant="ghost" 
+                        size="icon"
+                        className="h-5 w-5 text-zinc-450 hover:text-amber-550 hover:bg-amber-100/10 rounded-md shrink-0 cursor-pointer"
+                        title="Snooze 24 hours"
+                        onClick={(e) => handleSnoozeTask(task.id, e)}
+                      >
+                        <AlarmClock className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
                 </DialogHeader>
 

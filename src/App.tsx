@@ -74,12 +74,37 @@ function Dashboard() {
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectWebsite, setNewProjectWebsite] = useState('');
   const [newProjectType, setNewProjectType] = useState('Retainer');
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
   const [isAssigning, setIsAssigning] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
 
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  
+  const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pinnedProjectIds');
+      return saved ? JSON.parse(saved) : ['p1'];
+    } catch {
+      return ['p1'];
+    }
+  });
+
+  const togglePinProject = (projectId: string) => {
+    setPinnedProjectIds(prev => {
+      const next = prev.includes(projectId)
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId];
+      try {
+        localStorage.setItem('pinnedProjectIds', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
+
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [users, setUsers] = useState<UserProfile[]>(MOCK_USERS);
   const [reports, setReports] = useState<ClientReport[]>([
@@ -145,9 +170,19 @@ function Dashboard() {
     time: string;
     isRead: boolean;
     type: 'info' | 'alert' | 'success' | 'task';
+    taskId?: string;
   }
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([
+    {
+      id: 'noti-custom-t1',
+      title: '📋 Task Assigned to You',
+      message: 'You have been assigned to task "Monthly SEO Audit". Click here to view details and get started.',
+      time: 'Just now',
+      isRead: false,
+      type: 'task',
+      taskId: 't1'
+    },
     {
       id: 'noti-1',
       title: 'Active Project Assigned',
@@ -183,6 +218,7 @@ function Dashboard() {
   ]);
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -199,6 +235,73 @@ function Dashboard() {
   const handleToggleRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n));
   };
+
+  const handleNotificationClick = (notif: NotificationItem) => {
+    // Mark as read
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true } : n));
+    
+    if (notif.taskId) {
+      const taskItem = tasks.find(t => t.id === notif.taskId);
+      if (taskItem) {
+        // Clear contradictory UI filters so that the task is visible
+        setFilterAssigneeId(null);
+        setFilterStatus(null);
+        setFilterPriority(null);
+        setSelectedProjectId(taskItem.projectId);
+        setHighlightedTaskId(notif.taskId);
+        setActiveTab('tasks');
+        setIsNotificationsOpen(false);
+        toast.success(`Opening assignment: "${taskItem.name}"`);
+      } else {
+        toast.error("Referenced task could not be found.");
+      }
+    }
+  };
+
+  // Keep track of previously loaded tasks to detect new assignments to the logged in user
+  const prevTasksRef = React.useRef<Task[]>([]);
+
+  React.useEffect(() => {
+    const prevTasks = prevTasksRef.current;
+    if (prevTasks && prevTasks.length > 0) {
+      tasks.forEach(currentTask => {
+        const matchingPrevTask = prevTasks.find(pt => pt.id === currentTask.id);
+        
+        // Scenario A: Newly created task, assigned to current user, was not in previous tasks, and assignee is current user
+        if (!matchingPrevTask) {
+          if (currentTask.assigneeId === user.id) {
+            const newNotif: NotificationItem = {
+              id: `noti-${Date.now()}-${currentTask.id}`,
+              title: '🆕 Assigned to New Task',
+              message: `You have been assigned to task "${currentTask.name}" by the project coordinator.`,
+              time: 'Just now',
+              isRead: false,
+              type: 'task',
+              taskId: currentTask.id
+            };
+            setNotifications(prev => [newNotif, ...prev]);
+            toast.info(`New assignment: "${currentTask.name}" has been added to your notifications.`);
+          }
+        }
+        // Scenario B: Existing task assignee changed from someone else to current user
+        else if (matchingPrevTask.assigneeId !== currentTask.assigneeId && currentTask.assigneeId === user.id) {
+          const newNotif: NotificationItem = {
+            id: `noti-${Date.now()}-${currentTask.id}`,
+            title: '🚀 Task Handed Over to You',
+            message: `Task "${currentTask.name}" has been reassigned to you. Click to review.`,
+            time: 'Just now',
+            isRead: false,
+            type: 'task',
+            taskId: currentTask.id
+          };
+          setNotifications(prev => [newNotif, ...prev]);
+          toast.info(`Task "${currentTask.name}" was transferred to your workspace.`);
+        }
+      });
+    }
+    // Update reference
+    prevTasksRef.current = tasks;
+  }, [tasks, user.id]);
 
 
   // Lifted Timer State running in background on tab changes
@@ -376,6 +479,10 @@ function Dashboard() {
 
   const handleConfirmProject = () => {
     const projectId = 'p' + (projects.length + 1);
+    const resolvedWebsite = newProjectWebsite.trim() 
+      ? (newProjectWebsite.startsWith('http://') || newProjectWebsite.startsWith('https://') ? newProjectWebsite.trim() : `https://${newProjectWebsite.trim()}`)
+      : `https://${newProjectName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'project'}.com`;
+
     const newProject: Project = {
       id: projectId,
       name: newProjectName,
@@ -383,7 +490,8 @@ function Dashboard() {
       accountManagerId: selectedAMId,
       type: newProjectType as ProjectType,
       status: 'Active',
-      startDate: new Date().toISOString().split('T')[0]
+      startDate: new Date().toISOString().split('T')[0],
+      websiteUrl: resolvedWebsite
     };
 
     const newTask: Task = {
@@ -407,6 +515,7 @@ function Dashboard() {
     setIsCreateDialogOpen(false);
     setAiSuggestion(null);
     setNewProjectName('');
+    setNewProjectWebsite('');
     
     // Redirect to the new project's board or tasks
     setSelectedProjectId(projectId);
@@ -440,14 +549,30 @@ function Dashboard() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview':
-        return <Overview projects={projects} tasks={tasks} />;
+        return (
+          <Overview 
+            projects={projects} 
+            tasks={tasks} 
+            pinnedProjectIds={pinnedProjectIds}
+            onTogglePin={togglePinProject}
+            onClickProject={(projectId) => {
+              setSelectedProjectId(projectId);
+              setActiveTab('tasks');
+            }}
+            onNavigateToProjects={() => setActiveTab('projects')}
+          />
+        );
       case 'projects':
         return <ProjectBoard 
           projects={projects}
+          tasks={tasks}
+          pinnedProjectIds={pinnedProjectIds}
+          onTogglePin={togglePinProject}
           onProjectClick={(projectId) => {
             setSelectedProjectId(projectId);
             setActiveTab('tasks');
           }} 
+          onAddProjectClick={() => setIsCreateDialogOpen(true)}
         />;
       case 'tasks':
         return <TaskEngine 
@@ -469,6 +594,8 @@ function Dashboard() {
           setElapsedTimes={setElapsedTimes}
           formatTime={formatTime}
           toggleTimer={toggleTimer}
+          highlightedTaskId={highlightedTaskId}
+          setHighlightedTaskId={setHighlightedTaskId}
         />;
       case 'team':
         return <TeamView users={users} setUsers={setUsers} />;
@@ -888,7 +1015,7 @@ function Dashboard() {
                         notifications.map(notif => (
                           <div 
                             key={notif.id}
-                            onClick={() => handleToggleRead(notif.id)}
+                            onClick={() => handleNotificationClick(notif)}
                             className={cn(
                               "p-3.5 flex items-start space-x-3 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/60 transition-colors select-none",
                               !notif.isRead ? "bg-orange-500/[0.02]" : "opacity-80"
@@ -985,7 +1112,7 @@ function Dashboard() {
               </div>
             </div>
             
-            {!isClient && (
+            {!isClient && activeTab === 'projects' && (
               <div className="flex items-center space-x-2 sm:space-x-3 w-full sm:w-auto justify-end">
                 <Button 
                   onClick={() => setIsFilterDialogOpen(true)}
@@ -1107,6 +1234,15 @@ function Dashboard() {
                 placeholder="e.g. Acme Corp Web Build" 
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="website" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Website URL <span className="text-zinc-400 lowercase font-medium">(Optional)</span></Label>
+              <Input 
+                id="website" 
+                placeholder="e.g. www.acme.com" 
+                value={newProjectWebsite}
+                onChange={(e) => setNewProjectWebsite(e.target.value)}
               />
             </div>
             <div className="grid gap-2">

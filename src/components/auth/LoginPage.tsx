@@ -37,11 +37,25 @@ export function LoginPage() {
   const [activeTab, setActiveTab] = useState<'agency' | 'client'>('agency');
   const [loading, setLoading] = useState(false);
 
+  // First-time password configuration states
+  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
+  const [firstTimeUser, setFirstTimeUser] = useState<UserProfile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
   // Forgot password states
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSubmitted, setResetSubmitted] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
+
+  // Interactive Reset Password states (when secure reset link is clicked)
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetTokenUser, setResetTokenUser] = useState<UserProfile | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmNewPassword, setResetConfirmNewPassword] = useState('');
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
 
   const handleResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +63,96 @@ export function LoginPage() {
       toast.error("Please enter your email address");
       return;
     }
+
+    const matchedUser = MOCK_USERS.find(
+      u => u.email.toLowerCase() === resetEmail.trim().toLowerCase()
+    );
+
+    if (!matchedUser) {
+      toast.error(`No user profile found for "${resetEmail}". Select a Quick Profile below to copy its email.`);
+      return;
+    }
+
     setResetSubmitting(true);
     setTimeout(() => {
       setResetSubmitting(false);
       setResetSubmitted(true);
-      toast.success(`A password reset link was sent to ${resetEmail}!`);
-    }, 1200);
+      setResetTokenUser(matchedUser);
+      toast.success(`Password reset link initialized! Use the Mock Mail Delivery box below to complete the reset.`);
+    }, 1000);
+  };
+
+  const handleCompleteReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTokenUser) return;
+
+    if (resetNewPassword.length < 5) {
+      toast.error("Password must be at least 5 characters long for security!");
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmNewPassword) {
+      toast.error("Passwords do not match!");
+      return;
+    }
+
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      
+      // Save password
+      localStorage.setItem('blufig_custom_password_' + resetTokenUser.email.toLowerCase(), resetNewPassword);
+      
+      toast.success(`Your secure password has been successfully configured! Please log in.`);
+      
+      // Clear reset states
+      setIsForgotPassword(false);
+      setResetSubmitted(false);
+      setResetEmail('');
+      setResetTokenUser(null);
+      setIsResettingPassword(false);
+      setResetNewPassword('');
+      setResetConfirmNewPassword('');
+      
+      // Prefill user details
+      setEmail(resetTokenUser.email);
+      setPassword('');
+    }, 905);
+  };
+
+  const handleFirstTimeSetup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstTimeUser) return;
+
+    if (newPassword.length < 5) {
+      toast.error("Password must be at least 5 characters long for security!");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Passwords do not match!");
+      return;
+    }
+
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      
+      // Save custom password
+      localStorage.setItem('blufig_custom_password_' + firstTimeUser.email.toLowerCase(), newPassword);
+      
+      // Log them in
+      setUser(firstTimeUser);
+      localStorage.setItem('blufig_logged_user', JSON.stringify(firstTimeUser));
+      
+      toast.success(`Your custom password was securely configured! Welcome, ${firstTimeUser.name}!`);
+      
+      // Clear states
+      setIsFirstTimeSetup(false);
+      setFirstTimeUser(null);
+      setNewPassword('');
+      setConfirmNewPassword('');
+    }, 850);
   };
 
   // Filter users by role categories
@@ -79,9 +177,19 @@ export function LoginPage() {
       setLoading(false);
       
       if (matchedUser) {
-        // Simple password fallback: if they typed 123456789 or password, or matches matchedUser.password
-        const userPass = matchedUser.password || 'password';
-        if (password === userPass || password === 'password' || password === '123456789' || !password) {
+        // Look up custom password
+        const savedCustomPassword = localStorage.getItem('blufig_custom_password_' + matchedUser.email.toLowerCase());
+        
+        // Force custom password setup if they haven't configured their own password yet
+        if (!savedCustomPassword) {
+          setFirstTimeUser(matchedUser);
+          setIsFirstTimeSetup(true);
+          toast.info(`Welcome to BluFig, ${matchedUser.name}! Since this is your first-time login, please configure your new custom password.`);
+          return;
+        }
+
+        // Verify custom password
+        if (password === savedCustomPassword) {
           // If they selected client tab but matched an agency user, guide them
           if (activeTab === 'client' && matchedUser.role !== UserRole.CLIENT) {
             toast.warning(`"${matchedUser.name}" looks like an Agency Member. Switched to Agency mode!`);
@@ -96,7 +204,7 @@ export function LoginPage() {
           toast.success(`Welcome back, ${matchedUser.name}! Logging you in as ${matchedUser.role.replace('_', ' ')}.`);
           return;
         } else {
-          toast.error("Invalid password. For demo, you can leave it blank or enter 'password'.");
+          toast.error("Invalid secure password. Enter your custom password or click 'Forgot Password?' to reset it.");
         }
       } else {
         toast.error(`No profile found for "${email}". Click on any quick-login card below!`);
@@ -106,13 +214,24 @@ export function LoginPage() {
 
   const selectQuickProfile = (profile: UserProfile, category: 'agency' | 'client') => {
     setEmail(profile.email);
-    setPassword(profile.password || 'password');
     setActiveTab(category);
+
+    const savedCustomPassword = localStorage.getItem('blufig_custom_password_' + profile.email.toLowerCase());
     
-    // Auto-login for exceptional sandbox UX
+    // If first time profile setup
+    if (!savedCustomPassword) {
+      setFirstTimeUser(profile);
+      setIsFirstTimeSetup(true);
+      toast.info(`Configuring first login for ${profile.name}. Please set your custom password!`);
+      return;
+    }
+
+    // Auto-login with configured password for sandbox comfort
+    setPassword(savedCustomPassword);
+    
     setUser(profile);
     localStorage.setItem('blufig_logged_user', JSON.stringify(profile));
-    toast.success(`Success! Connected as ${profile.name} (${profile.role.replace('_', ' ')})`);
+    toast.success(`Success! Connected as ${profile.name} using your custom secure password.`);
   };
 
   return (
@@ -212,9 +331,160 @@ export function LoginPage() {
               Client Partner
             </TabsTrigger>
           </TabsList>
-
           <Card className="border-zinc-200/60 dark:border-zinc-800 shadow-md">
-            {isForgotPassword ? (
+            {isFirstTimeSetup ? (
+              <form onSubmit={handleFirstTimeSetup}>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-bold flex items-center justify-between">
+                    <span>Define Custom Password</span>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400 bg-zinc-50 dark:bg-zinc-900 border px-2 py-0.5 rounded">
+                      First Login Verification
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Hey <strong className="text-zinc-800 dark:text-zinc-200">{firstTimeUser?.name}</strong>! As this is your very first login, please establish your own personalized secure password.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Choose Your Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <Input 
+                        id="new-password" 
+                        type={showNewPassword ? "text" : "password"} 
+                        placeholder="At least 5 characters long" 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="pl-10 pr-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-405 hover:text-zinc-650 cursor-pointer focus:outline-none"
+                        title={showNewPassword ? "Hide password" : "Show password"}
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Confirm Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <Input 
+                        id="confirm-password" 
+                        type={showNewPassword ? "text" : "password"} 
+                        placeholder="Confirm your secure password" 
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        className="pl-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl"
+                        required
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-2 flex flex-col space-y-4">
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full h-11 rounded-xl text-xs uppercase font-extrabold tracking-widest text-white bg-orange-500 hover:bg-orange-600 shadow-md cursor-pointer"
+                  >
+                    {loading ? 'Encrypting Credentials...' : 'Set Password and Enter Portal'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsFirstTimeSetup(false);
+                      setFirstTimeUser(null);
+                      setNewPassword('');
+                      setConfirmNewPassword('');
+                    }}
+                    className="w-full text-xs font-bold text-zinc-500 hover:text-zinc-900 hover:bg-transparent"
+                  >
+                    Cancel Setup
+                  </Button>
+                </CardFooter>
+              </form>
+            ) : isResettingPassword ? (
+              <form onSubmit={handleCompleteReset}>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-bold flex items-center justify-between">
+                    <span>Setup Custom Password</span>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-orange-500 bg-orange-100 dark:bg-orange-950/20 px-2 py-0.5 rounded">
+                      Secure Token Validation
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Update credentials for <strong className="text-zinc-800 dark:text-zinc-200">{resetTokenUser?.name}</strong> ({resetTokenUser?.email}). Set your own private secure password below.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-new-password" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Choose New Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <Input 
+                        id="reset-new-password" 
+                        type={showResetNewPassword ? "text" : "password"} 
+                        placeholder="Minimum 5 characters" 
+                        value={resetNewPassword}
+                        onChange={(e) => setResetNewPassword(e.target.value)}
+                        className="pl-10 pr-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-405 hover:text-zinc-650 cursor-pointer focus:outline-none"
+                      >
+                        {showResetNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-confirm-password" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Confirm Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <Input 
+                        id="reset-confirm-password" 
+                        type={showResetNewPassword ? "text" : "password"} 
+                        placeholder="Confirm secure password" 
+                        value={resetConfirmNewPassword}
+                        onChange={(e) => setResetConfirmNewPassword(e.target.value)}
+                        className="pl-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl font-medium"
+                        required
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-2 flex flex-col space-y-4">
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full h-11 rounded-xl text-xs uppercase font-extrabold tracking-widest text-white bg-orange-500 hover:bg-orange-600 shadow cursor-pointer"
+                  >
+                    {loading ? 'Re-keying accounts...' : 'Apply Security Password'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsResettingPassword(false);
+                      setResetTokenUser(null);
+                      setIsForgotPassword(false);
+                    }}
+                    className="w-full text-xs font-bold text-zinc-500 hover:text-zinc-900"
+                  >
+                    Cancel and Login
+                  </Button>
+                </CardFooter>
+              </form>
+            ) : isForgotPassword ? (
               <form onSubmit={handleResetPassword}>
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg font-bold flex items-center justify-between">
@@ -229,16 +499,42 @@ export function LoginPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {resetSubmitted ? (
-                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 rounded-xl p-5 text-center space-y-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
-                        <CheckCircle2 className="w-6 h-6" />
+                    <div className="space-y-4">
+                      <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 rounded-xl p-5 text-center space-y-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
+                          <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 font-sans">Dispatched Successfully</h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                            Secure reset credentials have been routed directly to <strong className="text-zinc-800 dark:text-zinc-200">{resetEmail}</strong>.
+                          </p>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100 font-sans">Dispatched Successfully</h4>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                          Secure reset credentials have been routed directly to <strong className="text-zinc-800 dark:text-zinc-200">{resetEmail}</strong>.
-                        </p>
-                      </div>
+
+                      {/* Integrated Clickable Simulation Link requested by USER */}
+                      {resetTokenUser && (
+                        <div className="bg-orange-50/70 dark:bg-orange-950/15 border border-orange-200/50 dark:border-orange-900/40 rounded-xl p-4 scale-95 origin-center transition-all space-y-3 shadow-inner">
+                          <div className="flex items-center space-x-2 text-xs font-black text-orange-600 dark:text-orange-450 uppercase tracking-widest">
+                            <Mail className="w-4 h-4 text-orange-500 shrink-0" />
+                            <span>Mock Mail Server Sync</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
+                            [Inbox Simulation] Secure reset authorization receipt delivered for <strong className="text-zinc-805 dark:text-zinc-205">{resetTokenUser.name}</strong>. Reset your password by clicking the token link:
+                          </p>
+                          <Button 
+                            type="button" 
+                            onClick={() => {
+                              setIsResettingPassword(true);
+                              setResetNewPassword('');
+                              setResetConfirmNewPassword('');
+                            }}
+                            className="w-full bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white font-extrabold text-[10px] h-9 rounded-lg uppercase tracking-widest cursor-pointer shadow-sm shadow-orange-500/10 transition-all"
+                          >
+                            🔗 Click here to reset your password
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -248,7 +544,7 @@ export function LoginPage() {
                         <Input 
                           id="reset-email" 
                           type="email" 
-                          placeholder="e.g. user@organization.com" 
+                          placeholder="e.g. amit@blufig.digital or sarah@acmecorp.com" 
                           value={resetEmail}
                           onChange={(e) => setResetEmail(e.target.value)}
                           className="pl-10 h-11 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-xl font-medium"
@@ -280,6 +576,7 @@ export function LoginPage() {
                       setIsForgotPassword(false);
                       setResetSubmitted(false);
                       setResetEmail('');
+                      setResetTokenUser(null);
                     }}
                     className="w-full text-xs font-bold text-zinc-500 hover:text-zinc-900 hover:bg-transparent"
                   >

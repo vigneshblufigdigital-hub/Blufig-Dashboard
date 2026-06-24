@@ -9,7 +9,8 @@ import {
   Briefcase, 
   Package,
   Layers,
-  MessageSquare
+  MessageSquare,
+  Calendar
 } from 'lucide-react';
 import { UserRole, ADMIN_ROLES } from '../../types';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, roles: ADMIN_ROLES },
   { id: 'projects', label: 'Projects', icon: Briefcase, roles: ADMIN_ROLES },
   { id: 'tasks', label: 'Tasks', icon: Layers, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
+  { id: 'calendar', label: 'Calendar', icon: Calendar, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
   { id: 'team', label: 'Team', icon: Users, roles: ADMIN_ROLES },
   { id: 'reports', label: 'Reports', icon: BarChart3, roles: [...ADMIN_ROLES, UserRole.CLIENT] },
   { id: 'billing', label: 'Invoices', icon: Package, roles: [...ADMIN_ROLES, UserRole.CLIENT] },

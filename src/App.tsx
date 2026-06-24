@@ -38,6 +38,7 @@ import { TimeSheet } from './components/dashboard/TimeSheet';
 import { ClientPortal } from './components/portal/ClientPortal';
 import { LoginPage } from './components/auth/LoginPage';
 import { UserProfileView } from './components/dashboard/UserProfileView';
+import { CalendarView } from './components/dashboard/CalendarView';
 import { 
   Dialog, 
   DialogContent, 
@@ -597,6 +598,15 @@ function Dashboard() {
           highlightedTaskId={highlightedTaskId}
           setHighlightedTaskId={setHighlightedTaskId}
         />;
+      case 'calendar':
+        return (
+          <CalendarView 
+            tasks={tasks}
+            setTasks={setTasks}
+            projects={projects}
+            users={users}
+          />
+        );
       case 'team':
         return <TeamView users={users} setUsers={setUsers} />;
       case 'profile':

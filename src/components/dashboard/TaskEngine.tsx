@@ -2157,7 +2157,7 @@ export function TaskEngine({
 
                           {/* Pipeline Badge on card when not expanded */}
                           {task.workflowSteps && task.workflowSteps.length > 0 && (
-                            <div className="mt-3 p-1.5 bg-zinc-55/60 dark:bg-zinc-90 w/40 rounded-xl border border-zinc-150 dark:border-zinc-800/80 flex items-center justify-between text-[10px] font-semibold text-zinc-550 dark:text-zinc-400 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
+                            <div className="mt-3 p-1.5 bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }}>
                               <span className="truncate max-w-[170px] flex items-center gap-1.5">
                                 <span className="text-[8px] uppercase font-black text-brand-secondary shrink-0 tracking-wider">🔄 Active:</span>
                                 <span className="text-zinc-700 dark:text-zinc-300 font-extrabold truncate">{task.workflowSteps[task.currentStepIndex ?? 0].name}</span>
@@ -2420,7 +2420,7 @@ export function TaskEngine({
                             {/* Clock timer + Context Trigger Menu */}
                             <div className="flex items-center space-x-1.5 shrink-0">
                               {!(elapsedTimes[task.id] > 0) && (
-                                <div className="flex items-center text-[10px] text-zinc-405 dark:text-zinc-500 font-medium whitespace-nowrap font-mono mr-0.5">
+                                <div className="flex items-center text-[10px] text-zinc-400 dark:text-zinc-500 font-medium whitespace-nowrap font-mono mr-0.5">
                                   <Clock className="w-3 h-3 mr-1 shrink-0" />
                                   <span>{task.dueDate ? task.dueDate.split('-').slice(1).join('/') : 'N/A'}</span>
                                 </div>
@@ -2440,7 +2440,7 @@ export function TaskEngine({
                                 size="icon"
                                 className={cn(
                                   "h-7 w-7 rounded-lg transition-all cursor-pointer",
-                                  activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-650 text-white animate-pulse" : "bg-zinc-50 dark:bg-zinc-805 hover:bg-zinc-100 dark:hover:bg-zinc-750 text-zinc-550 dark:text-zinc-400"
+                                  activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
                                 )}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -2582,9 +2582,9 @@ export function TaskEngine({
                 </DialogHeader>
 
                 {/* Quick Info Grid */}
-                <div className="grid grid-cols-2 gap-4 bg-zinc-50/50 dark:bg-zinc-900/10 p-3.5 rounded-xl border border-zinc-150 dark:border-zinc-850 shadow-sm">
+                <div className="grid grid-cols-2 gap-4 bg-zinc-50/50 dark:bg-zinc-900/10 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
                   <div className="space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 block tracking-wider">Status</span>
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Status</span>
                     <Select 
                       value={task.status} 
                       onValueChange={(newStatus) => {
@@ -2605,7 +2605,7 @@ export function TaskEngine({
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 block tracking-wider">Priority</span>
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Priority</span>
                     <Select 
                       value={task.priority} 
                       onValueChange={(newPriority) => {
@@ -2626,7 +2626,7 @@ export function TaskEngine({
                   </div>
 
                   <div className="col-span-2 space-y-1 pb-1">
-                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider block">Assignee</span>
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider block">Assignee</span>
                     <div className="flex items-center space-x-3 bg-white dark:bg-zinc-950 border border-zinc-150 rounded-xl p-2.5 shadow-sm">
                       <Avatar className="w-8 h-8 border shadow-sm">
                         <AvatarFallback className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700">
@@ -2670,8 +2670,8 @@ export function TaskEngine({
                 {/* Description */}
                 {task.description && (
                   <div className="space-y-1.5">
-                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider block">Description</span>
-                    <div className="text-xs text-zinc-650 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-900/10 border border-zinc-150 dark:border-zinc-850 p-3.5 rounded-xl font-medium">
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider block">Description</span>
+                    <div className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-xl font-medium">
                       {task.description}
                     </div>
                   </div>
@@ -2740,7 +2740,7 @@ export function TaskEngine({
                 {/* Subtasks */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] uppercase font-bold text-zinc-405 dark:text-zinc-550 tracking-wider">Subtasks ({completedCount}/{subtaskCount})</span>
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider">Subtasks ({completedCount}/{subtaskCount})</span>
                     {subtaskCount > 0 && <span className="text-[10px] font-mono text-zinc-400 font-bold">{Math.round((completedCount/subtaskCount)*100)}% Completed</span>}
                   </div>
                   <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
@@ -2782,9 +2782,9 @@ export function TaskEngine({
                 </div>
 
                 {/* Timesheet Duration and Log Toggle inside Modal */}
-                <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-850 pt-5 flex items-center justify-between">
+                <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-800 pt-5 flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <span className="text-[9px] uppercase font-extrabold text-zinc-405 dark:text-zinc-550 block">Time Spent Tracker</span>
+                    <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-450 block">Time Spent Tracker</span>
                     <span className="font-mono text-lg font-black text-zinc-900 dark:text-white block">
                       {formatTime(elapsedTimes[task.id] || 0)}
                     </span>

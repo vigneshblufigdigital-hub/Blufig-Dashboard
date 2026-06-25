@@ -362,7 +362,7 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-405 hover:text-zinc-650 cursor-pointer focus:outline-none"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-600 cursor-pointer focus:outline-none"
                         title={showNewPassword ? "Hide password" : "Show password"}
                       >
                         {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -439,7 +439,7 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowResetNewPassword(!showResetNewPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-405 hover:text-zinc-650 cursor-pointer focus:outline-none"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-600 cursor-pointer focus:outline-none"
                       >
                         {showResetNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -643,7 +643,7 @@ export function LoginPage() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200 cursor-pointer focus:outline-none"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer focus:outline-none"
                         title={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -690,7 +690,7 @@ export function LoginPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Quick BluFig Admins/Staff */}
             <div className="space-y-2">
-              <span className="text-[9px] font-bold text-zinc-550 dark:text-zinc-500 uppercase tracking-widest block">
+              <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-450 uppercase tracking-widest block">
                 ⭐ BluFig Agency Members
               </span>
               <div className="space-y-2">
@@ -701,7 +701,7 @@ export function LoginPage() {
                     className="w-full text-left p-2.5 rounded-xl border border-zinc-200/50 dark:border-zinc-850 bg-white dark:bg-zinc-900 hover:border-zinc-900 dark:hover:border-zinc-100 transition-all flex items-center justify-between group"
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-zinc-105 dark:bg-zinc-800 text-zinc-800 dark:text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-white font-bold text-xs flex items-center justify-center shrink-0">
                         {u.name.charAt(0)}
                       </div>
                       <div className="min-w-0">
@@ -719,7 +719,7 @@ export function LoginPage() {
 
             {/* Quick Clients */}
             <div className="space-y-2">
-              <span className="text-[9px] font-bold text-orange-550 dark:text-orange-400 uppercase tracking-widest block">
+              <span className="text-[9px] font-bold text-orange-500 dark:text-orange-400 uppercase tracking-widest block">
                 💼 Client Partners (Isolated)
               </span>
               <div className="space-y-2">

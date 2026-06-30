@@ -23,8 +23,8 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard, roles: ADMIN_ROLES },
-  { id: 'projects', label: 'Projects', icon: Briefcase, roles: ADMIN_ROLES },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
+  { id: 'projects', label: 'Projects', icon: Briefcase, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
   { id: 'tasks', label: 'Tasks', icon: Layers, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
   { id: 'calendar', label: 'Calendar', icon: Calendar, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
   { id: 'team', label: 'Team', icon: Users, roles: ADMIN_ROLES },

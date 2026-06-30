@@ -26,9 +26,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [loading] = useState(false);
 
+  React.useEffect(() => {
+    try {
+      if (user) {
+        localStorage.setItem('blufig_logged_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('blufig_logged_user');
+      }
+    } catch (e) {
+      console.error('Could not save user to localStorage', e);
+    }
+  }, [user]);
+
   const logout = async () => {
     setUser(null);
-    localStorage.removeItem('blufig_logged_user');
     toast.info("Logged out successfully");
   };
 

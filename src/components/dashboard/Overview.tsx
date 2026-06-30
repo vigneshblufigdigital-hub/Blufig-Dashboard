@@ -14,7 +14,8 @@ import {
   ExternalLink,
   Users,
   Calendar,
-  ArrowRight
+  ArrowRight,
+  Layers
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -31,6 +32,7 @@ import {
 
 import { useAuth } from '../../contexts/AuthContext';
 import { MOCK_USERS } from '../../mockData';
+import { ADMIN_ROLES, UserRole } from '../../types';
 
 export function Overview({ 
   projects, 
@@ -48,6 +50,14 @@ export function Overview({
   onNavigateToProjects?: () => void
 }) {
   const { user } = useAuth();
+  const isLeadOrAdmin = user && ADMIN_ROLES.includes(user.role);
+
+  // Scoped tasks list for current user
+  const visibleTasks = tasks.filter(t => {
+    if (isLeadOrAdmin) return true;
+    const isWorkflowAssignee = t.workflowSteps?.some(step => step.assigneeId === user?.id);
+    return t.assigneeId === user?.id || isWorkflowAssignee;
+  });
   
   // --- Calculate Live Weekly Task Velocity ---
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -58,7 +68,7 @@ export function Overview({
     return acc;
   }, {} as Record<string, { day: string; completed: number; pending: number }>);
 
-  tasks.forEach(task => {
+  visibleTasks.forEach(task => {
     const dateStr = task.dueDate || task.createdAt;
     if (!dateStr) return;
     const date = new Date(dateStr);
@@ -88,7 +98,7 @@ export function Overview({
   let delayedCount = 0;
 
   projects.forEach(project => {
-    const projectTasks = tasks.filter(t => t.projectId === project.id);
+    const projectTasks = visibleTasks.filter(t => t.projectId === project.id);
     
     if (projectTasks.length === 0) {
       onTrackCount++;
@@ -130,14 +140,14 @@ export function Overview({
   ];
 
   const activeProjectsCount = projects.filter(p => p.status === 'Active').length;
-  const tasksDueTodayCount = tasks.filter(t => t.dueDate === new Date().toISOString().split('T')[0]).length;
+  const tasksDueTodayCount = visibleTasks.filter(t => t.dueDate === new Date().toISOString().split('T')[0]).length;
   
   // Tasks completed in the last 7 days
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoStr = sevenDaysAgo.toISOString();
 
-  const completedLastSevenDaysCount = tasks.filter(t => {
+  const completedLastSevenDaysCount = visibleTasks.filter(t => {
     const isCompleted = t.status === 'Done' || t.status === 'Approved';
     if (!isCompleted) return false;
     const dateStr = t.updatedAt || t.createdAt;
@@ -152,6 +162,14 @@ export function Overview({
   const deliveryHealthChange = deliveryHealthVal >= 90 ? 'Excellent' : deliveryHealthVal >= 75 ? 'Stable' : 'Needs Focus';
 
   const pinnedProjects = projects.filter(p => pinnedProjectIds.includes(p.id));
+
+  // Personal active tasks for the logged-in user
+  const myActiveTasks = tasks.filter(t => {
+    const isAssignee = t.assigneeId === user?.id;
+    const isWorkflowStepAssignee = t.workflowSteps?.some(step => step.assigneeId === user?.id);
+    const isNotDone = !['Done', 'Approved', 'Cancelled'].includes(t.status);
+    return (isAssignee || isWorkflowStepAssignee) && isNotDone;
+  });
 
   return (
     <div className="space-y-6">
@@ -173,7 +191,7 @@ export function Overview({
         <StatCard 
           title="Tasks Due Today" 
           value={tasksDueTodayCount.toString()} 
-          change={`${tasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'Done' && t.status !== 'Approved' && t.status !== 'Cancelled').length} Overdue`} 
+          change={`${visibleTasks.filter(t => t.dueDate && t.dueDate < todayStr && t.status !== 'Done' && t.status !== 'Approved' && t.status !== 'Cancelled').length} Overdue`} 
           icon={Clock} 
           color="orange" 
         />
@@ -192,6 +210,124 @@ export function Overview({
           color="indigo" 
         />
       </div>
+
+      {/* My Active Assignments Section */}
+      <Card className="border-zinc-200/50 dark:border-zinc-850">
+        <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-850/50 flex flex-row items-center justify-between space-y-0">
+          <div className="space-y-1">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-orange-500" />
+              <span>My Active Assignments</span>
+            </CardTitle>
+            <p className="text-xs text-zinc-400">Your personalized active sprint tasks and collaborative workflow pipeline deliverables.</p>
+          </div>
+          <Badge className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-bold font-mono">
+            {myActiveTasks.length} Pending
+          </Badge>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {myActiveTasks.length === 0 ? (
+            <div className="text-center py-8 text-zinc-400 text-xs italic">
+              ✨ All caught up! No active tasks are assigned to you right now.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {myActiveTasks.slice(0, 6).map(task => {
+                const project = projects.find(p => p.id === task.projectId);
+                
+                // Determine current workflow step progress if any
+                const currentStepIdx = task.workflowSteps?.findIndex(step => step.status !== 'Approved');
+                const totalSteps = task.workflowSteps?.length || 0;
+                const hasWorkflow = totalSteps > 0;
+                
+                // Priority styling
+                const priorityColors: Record<string, string> = {
+                  'Critical': 'text-rose-500 bg-rose-500/10 border-rose-500/20',
+                  'High': 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+                  'Normal': 'text-zinc-500 bg-zinc-500/10 border-zinc-500/20',
+                  'Low': 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+                };
+                
+                // Status styling
+                const statusColors: Record<string, string> = {
+                  'Open': 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
+                  'In Progress': 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+                  'Review': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                  'Revision Requested': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                  'Blocked': 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                };
+
+                return (
+                  <div key={task.id} className="p-4 rounded-xl border border-zinc-200/50 dark:border-zinc-850 bg-white dark:bg-zinc-900/50 flex flex-col justify-between space-y-4 hover:border-zinc-900 dark:hover:border-zinc-100 transition-all group">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider truncate max-w-[140px]">
+                          📁 {project?.name || 'Internal Workspace'}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${priorityColors[task.priority] || priorityColors.Normal}`}>
+                            {task.priority}
+                          </span>
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${statusColors[task.status] || 'bg-zinc-100 text-zinc-800'}`}>
+                            {task.status}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <h4 className="text-xs font-bold text-zinc-950 dark:text-zinc-50 leading-snug group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors">
+                        {task.name}
+                      </h4>
+                      
+                      {task.description && (
+                        <p className="text-[10px] text-zinc-400 line-clamp-2 leading-relaxed">
+                          {task.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-850/50 flex items-center justify-between">
+                      {hasWorkflow && task.workflowSteps ? (
+                        <div className="space-y-1">
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Pipeline Stage
+                          </p>
+                          <p className="text-[10px] font-black text-zinc-800 dark:text-zinc-200 flex items-center gap-1 leading-none">
+                            <span className="text-orange-500">{currentStepIdx !== undefined && currentStepIdx !== -1 ? currentStepIdx + 1 : totalSteps}</span>
+                            <span className="text-zinc-400 font-normal">/</span>
+                            <span>{totalSteps}</span>
+                            <span className="text-zinc-400 font-medium truncate max-w-[100px]">
+                              - {task.workflowSteps[currentStepIdx !== undefined && currentStepIdx !== -1 ? currentStepIdx : totalSteps - 1]?.name}
+                            </span>
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
+                            Task Type
+                          </p>
+                          <p className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 truncate max-w-[120px]">
+                            {task.type}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="text-right space-y-1">
+                        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
+                          Due Date
+                        </p>
+                        <p className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center justify-end gap-1 font-mono">
+                          <Calendar className="w-3 h-3 text-zinc-400" />
+                          <span>{task.dueDate ? new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : 'No Date'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Pinned Projects Section */}
       <div className="space-y-4">

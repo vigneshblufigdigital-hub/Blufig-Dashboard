@@ -78,10 +78,26 @@ function Dashboard() {
   const [newProjectWebsite, setNewProjectWebsite] = useState('');
   const [newProjectType, setNewProjectType] = useState('Retainer');
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
+  const [newProjectClientId, setNewProjectClientId] = useState<string>('client-1'); // Default to Sarah Johnson
   const [isAssigning, setIsAssigning] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
 
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const saved = localStorage.getItem('blufig_projects');
+      return saved ? JSON.parse(saved) : MOCK_PROJECTS;
+    } catch {
+      return MOCK_PROJECTS;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('blufig_projects', JSON.stringify(projects));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [projects]);
   
   const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>(() => {
     try {
@@ -106,17 +122,81 @@ function Dashboard() {
     });
   };
 
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
-  const [users, setUsers] = useState<UserProfile[]>(MOCK_USERS);
-  const [reports, setReports] = useState<ClientReport[]>([
-    { id: 'rep-1', projectId: 'p1', title: 'Monthly SEO Review - May 2024', date: '2024-05-10', type: 'Monthly', status: 'Published' },
-    { id: 'rep-2', projectId: 'p2', title: 'Paid Social Performance Flash', date: '2024-05-12', type: 'Weekly', status: 'Published' },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const saved = localStorage.getItem('blufig_tasks');
+      return saved ? JSON.parse(saved) : MOCK_TASKS;
+    } catch {
+      return MOCK_TASKS;
+    }
+  });
 
-  const [invoices, setInvoices] = useState<ClientInvoice[]>([
-    { id: 'inv-1', projectId: 'p1', invoiceNumber: 'INV-2024-001', amount: 1500, currency: 'USD', date: '2024-05-01', dueDate: '2024-05-15', status: 'Paid' },
-    { id: 'inv-2', projectId: 'p2', invoiceNumber: 'INV-2024-002', amount: 2800, currency: 'USD', date: '2024-05-10', dueDate: '2024-05-24', status: 'Pending' },
-  ]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('blufig_tasks', JSON.stringify(tasks));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [tasks]);
+
+  const [users, setUsers] = useState<UserProfile[]>(() => {
+    try {
+      const saved = localStorage.getItem('blufig_users');
+      return saved ? JSON.parse(saved) : MOCK_USERS;
+    } catch {
+      return MOCK_USERS;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('blufig_users', JSON.stringify(users));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [users]);
+
+  const [reports, setReports] = useState<ClientReport[]>(() => {
+    const defaultReports: ClientReport[] = [
+      { id: 'rep-1', projectId: 'p1', title: 'Monthly SEO Review - May 2024', date: '2024-05-10', type: 'Monthly', status: 'Published' },
+      { id: 'rep-2', projectId: 'p2', title: 'Paid Social Performance Flash', date: '2024-05-12', type: 'Weekly', status: 'Published' },
+    ];
+    try {
+      const saved = localStorage.getItem('blufig_reports');
+      return saved ? JSON.parse(saved) : defaultReports;
+    } catch {
+      return defaultReports;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('blufig_reports', JSON.stringify(reports));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [reports]);
+
+  const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
+    const defaultInvoices: ClientInvoice[] = [
+      { id: 'inv-1', projectId: 'p1', invoiceNumber: 'INV-2024-001', amount: 1500, currency: 'USD', date: '2024-05-01', dueDate: '2024-05-15', status: 'Paid' },
+      { id: 'inv-2', projectId: 'p2', invoiceNumber: 'INV-2024-002', amount: 2800, currency: 'USD', date: '2024-05-10', dueDate: '2024-05-24', status: 'Pending' },
+    ];
+    try {
+      const saved = localStorage.getItem('blufig_invoices');
+      return saved ? JSON.parse(saved) : defaultInvoices;
+    } catch {
+      return defaultInvoices;
+    }
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('blufig_invoices', JSON.stringify(invoices));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [invoices]);
 
   const isAdmin = ADMIN_ROLES.includes(user.role);
 
@@ -468,14 +548,58 @@ function Dashboard() {
       );
       
       setAiSuggestion(suggestion);
-      if (suggestion?.assigneeId) {
-        setSelectedAMId(suggestion.assigneeId);
-      }
+      // We do not override selectedAMId here to avoid overriding user's manual choice automatically.
+      // Instead, we let them see the suggestion and optionally apply it via a button.
       setIsAssigning(false);
     } catch (error) {
       console.error(error);
       setIsAssigning(false);
     }
+  };
+
+  const handleOpenCreateProject = () => {
+    setNewProjectName('');
+    setNewProjectWebsite('');
+    setNewProjectType('Retainer');
+    setAiSuggestion(null);
+    
+    if (user && user.role === UserRole.CLIENT) {
+      setNewProjectClientId(user.id);
+    } else {
+      const firstClient = users.find(u => u.role === UserRole.CLIENT);
+      setNewProjectClientId(firstClient ? firstClient.id : 'client-1');
+    }
+    
+    const firstAM = users.find(u => u.role !== UserRole.CLIENT);
+    setSelectedAMId(firstAM ? firstAM.id : '072');
+    
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleUpdateProjectAM = (projectId: string, amId: string) => {
+    setProjects(prevProjects => prevProjects.map(p => 
+      p.id === projectId 
+        ? { ...p, accountManagerId: amId }
+        : p
+    ));
+    
+    const chosenUser = users.find(u => u.id === amId);
+    if (chosenUser) {
+      toast.success(`Project has been assigned to ${chosenUser.name} (${chosenUser.designation || chosenUser.role.replace('_', ' ')})!`);
+    } else {
+      toast.success(`Project assignee updated.`);
+    }
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    setTasks(prev => prev.filter(t => t.projectId !== projectId));
+    toast.success("Project and all associated tasks deleted.");
+  };
+
+  const handleUpdateProjectStatus = (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending') => {
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status } : p));
+    toast.success(`Project status updated to ${status}.`);
   };
 
   const handleConfirmProject = () => {
@@ -484,10 +608,12 @@ function Dashboard() {
       ? (newProjectWebsite.startsWith('http://') || newProjectWebsite.startsWith('https://') ? newProjectWebsite.trim() : `https://${newProjectWebsite.trim()}`)
       : `https://${newProjectName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'project'}.com`;
 
+    const resolvedClientId = user && user.role === UserRole.CLIENT ? user.id : newProjectClientId;
+
     const newProject: Project = {
       id: projectId,
       name: newProjectName,
-      clientId: 'c' + (projects.length + 1),
+      clientId: resolvedClientId,
       accountManagerId: selectedAMId,
       type: newProjectType as ProjectType,
       status: 'Active',
@@ -567,13 +693,16 @@ function Dashboard() {
         return <ProjectBoard 
           projects={projects}
           tasks={tasks}
+          users={users}
           pinnedProjectIds={pinnedProjectIds}
           onTogglePin={togglePinProject}
           onProjectClick={(projectId) => {
             setSelectedProjectId(projectId);
             setActiveTab('tasks');
           }} 
-          onAddProjectClick={() => setIsCreateDialogOpen(true)}
+          onAddProjectClick={handleOpenCreateProject}
+          onUpdateProjectAM={handleUpdateProjectAM}
+          currentUser={user}
         />;
       case 'tasks':
         return <TaskEngine 
@@ -599,9 +728,14 @@ function Dashboard() {
           setHighlightedTaskId={setHighlightedTaskId}
         />;
       case 'calendar':
+        const filteredCalendarTasks = tasks.filter(t => {
+          if (user && ADMIN_ROLES.includes(user.role)) return true;
+          const isWorkflowAssignee = t.workflowSteps?.some(step => step.assigneeId === user?.id);
+          return t.assigneeId === user?.id || isWorkflowAssignee;
+        });
         return (
           <CalendarView 
-            tasks={tasks}
+            tasks={filteredCalendarTasks}
             setTasks={setTasks}
             projects={projects}
             users={users}
@@ -623,6 +757,7 @@ function Dashboard() {
             users={users} 
             onAddUser={handleAddUser} 
             onRemoveUser={handleRemoveUser} 
+            onUpdateUsers={setUsers}
           />
         ) : <Overview projects={projects} tasks={tasks} />;
       case 'reports':
@@ -1144,7 +1279,7 @@ function Dashboard() {
                 <Button 
                   size="sm" 
                   className="h-10 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-4 sm:px-6 flex-1 sm:flex-none cursor-pointer"
-                  onClick={() => setIsCreateDialogOpen(true)}
+                  onClick={handleOpenCreateProject}
                 >
                   Create New
                 </Button>
@@ -1269,15 +1404,33 @@ function Dashboard() {
               </Select>
             </div>
 
+            {user && ADMIN_ROLES.includes(user.role) && (
+              <div className="grid gap-2">
+                <Label htmlFor="client" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Client Partner</Label>
+                <Select value={newProjectClientId} onValueChange={setNewProjectClientId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select Client Partner" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.filter(u => u.role === UserRole.CLIENT).map(client => (
+                      <SelectItem key={client.id} value={client.id}>
+                        💼 {client.name} ({client.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="grid gap-2">
-              <Label htmlFor="am" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project AM</Label>
+              <Label htmlFor="am" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project AM / Assignee</Label>
               <Select value={selectedAMId} onValueChange={setSelectedAMId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Project AM" />
+                  <SelectValue placeholder="Select Project Assignee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {users.filter(u => ADMIN_ROLES.includes(u.role)).map(am => (
-                    <SelectItem key={am.id} value={am.id}>{am.name} ({am.role.replace('_', ' ')})</SelectItem>
+                  {users.filter(u => u.role !== UserRole.CLIENT).map(am => (
+                    <SelectItem key={am.id} value={am.id}>{am.name} ({am.designation || am.role.replace('_', ' ')})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1287,16 +1440,34 @@ function Dashboard() {
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="p-4 rounded-xl bg-orange-50 border border-orange-100"
+                className="p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30"
               >
                 <div className="flex items-center space-x-2 text-brand-secondary mb-1">
                   <Activity className="w-4 h-4" />
                   <p className="text-[10px] font-bold uppercase tracking-widest">AI Assignment Engine</p>
                 </div>
-                <p className="text-sm font-bold text-zinc-900">
-                  Assigned to: {MOCK_USERS.find(u => u.id === aiSuggestion.assigneeId)?.name}
-                </p>
-                <p className="text-xs text-zinc-600 mt-1 italic">"{aiSuggestion.reason}"</p>
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                      Suggested Assignee: {users.find(u => u.id === aiSuggestion.assigneeId)?.name || 'Amit Kumar'}
+                    </p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 italic leading-snug">"{aiSuggestion.reason}"</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="text-[10px] font-bold uppercase tracking-wider h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 shrink-0 ml-4 cursor-pointer"
+                    onClick={() => {
+                      if (aiSuggestion.assigneeId) {
+                        setSelectedAMId(aiSuggestion.assigneeId);
+                        toast.success(`Applied suggestion: ${users.find(u => u.id === aiSuggestion.assigneeId)?.name || 'Amit Kumar'}`);
+                      }
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
               </motion.div>
             )}
           </div>

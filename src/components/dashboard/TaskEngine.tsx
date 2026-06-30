@@ -430,25 +430,47 @@ export function TaskEngine({
     if (newTask.isRecurring && newTask.recurrenceTimes && newTask.recurrenceTimes > 1) {
       const times = newTask.recurrenceTimes;
       const period = newTask.recurrencePeriod || 'week';
+      const interval = newTask.recurrenceInterval || 1;
       
       for (let i = 2; i <= times; i++) {
-        let duedateObj = new Date(baseDueDate);
+        let duedateObj: Date;
+        if (baseDueDate.includes('-')) {
+          const parts = baseDueDate.split('-');
+          if (parts.length === 3) {
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            const day = parseInt(parts[2], 10);
+            duedateObj = new Date(year, month - 1, day);
+          } else {
+            duedateObj = new Date(baseDueDate);
+          }
+        } else {
+          duedateObj = new Date(baseDueDate);
+        }
+
         if (isNaN(duedateObj.getTime())) {
           duedateObj = new Date();
         }
+        
+        let daysToAdd = 0;
         if (period === 'week') {
-          const daysToAdd = Math.round((i - 1) * (7 / (times - 1 || 1)));
-          duedateObj.setDate(duedateObj.getDate() + (isNaN(daysToAdd) ? 1 : daysToAdd));
+          daysToAdd = (i - 1) * 7 * interval;
         } else {
-          const daysToAdd = Math.round((i - 1) * (30 / (times - 1 || 1)));
-          duedateObj.setDate(duedateObj.getDate() + (isNaN(daysToAdd) ? 1 : daysToAdd));
+          daysToAdd = (i - 1) * 30 * interval;
         }
+        
+        duedateObj.setDate(duedateObj.getDate() + daysToAdd);
+        
+        const yyyy = duedateObj.getFullYear();
+        const mm = String(duedateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(duedateObj.getDate()).padStart(2, '0');
+        const calculatedDueDate = `${yyyy}-${mm}-${dd}`;
         
         generatedRecurrenceTasks.push({
           ...taskToAdd,
           id: 't' + Math.random().toString(36).substr(2, 9),
           name: `${taskToAdd.name} (Recurring #${i})`,
-          dueDate: duedateObj.toISOString().split('T')[0],
+          dueDate: calculatedDueDate,
           isRecurring: true,
           recurrenceProgress: i
         });
@@ -578,8 +600,9 @@ export function TaskEngine({
     // Role based visibility
     const isLeadOrAdmin = user && ADMIN_ROLES.includes(user.role);
 
-    // If not lead/admin, only see assigned tasks
-    if (!isLeadOrAdmin && t.assigneeId !== user?.id) {
+    // If not lead/admin, only see assigned tasks or tasks where they are a workflow step assignee
+    const isWorkflowAssignee = t.workflowSteps?.some(step => step.assigneeId === user?.id);
+    if (!isLeadOrAdmin && t.assigneeId !== user?.id && !isWorkflowAssignee) {
       return false;
     }
 
@@ -1622,6 +1645,12 @@ export function TaskEngine({
                       <div className="flex flex-col">
                         <div className="flex items-center space-x-2">
                           <span className="font-bold text-sm tracking-tight">{task.name}</span>
+                          {task.isRecurring && (
+                            <Badge variant="outline" className="text-[9px] font-black uppercase text-orange-500 border-orange-500/30 bg-orange-500/5 px-1.5 py-0 select-none shrink-0 flex items-center space-x-1">
+                              <RefreshCw className="w-2.5 h-2.5 text-orange-500 animate-[spin_10s_linear_infinite]" />
+                              <span>Recurring</span>
+                            </Badge>
+                          )}
                           {subtaskCount > 0 && (
                             <div className="flex items-center space-x-1">
                               <div className="flex -space-x-1">
@@ -2147,8 +2176,14 @@ export function TaskEngine({
                             }}
                             className="cursor-pointer group"
                           >
-                            <h4 className="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 group-hover:text-brand-secondary transition-colors line-clamp-2">
-                              {task.name}
+                            <h4 className="font-bold text-sm tracking-tight text-zinc-900 dark:text-zinc-100 group-hover:text-brand-secondary transition-colors flex items-center flex-wrap gap-1.5">
+                              <span className="line-clamp-2">{task.name}</span>
+                              {task.isRecurring && (
+                                <Badge variant="outline" className="text-[9px] font-black uppercase text-orange-500 border-orange-500/30 bg-orange-500/5 px-1.5 py-0 select-none shrink-0 flex items-center space-x-1">
+                                  <RefreshCw className="w-2.5 h-2.5 text-orange-500 animate-[spin_10s_linear_infinite]" />
+                                  <span>Recurring</span>
+                                </Badge>
+                              )}
                             </h4>
                             <div className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold uppercase tracking-widest mt-1">
                               {task.type}
@@ -2564,6 +2599,12 @@ export function TaskEngine({
                     <Badge variant="outline" className="text-[10px] font-bold border-zinc-200 bg-zinc-50 dark:bg-zinc-900/25 text-zinc-500">
                       {task.type}
                     </Badge>
+                    {task.isRecurring && (
+                      <Badge variant="outline" className="text-[10px] font-bold border-orange-200 bg-orange-50 dark:bg-orange-950/25 text-orange-600 dark:text-orange-400 flex items-center space-x-1">
+                        <RefreshCw className="w-2.5 h-2.5 text-orange-500 animate-[spin_10s_linear_infinite]" />
+                        <span>Recurring {task.recurrencePeriod ? `(${task.recurrencePeriod}ly)` : ''}</span>
+                      </Badge>
+                    )}
                     <div className="flex items-center space-x-1.5 bg-zinc-100/50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/80 rounded-lg px-2 py-0.5 ml-auto">
                       <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium whitespace-nowrap">
                         Due: {task.dueDate || 'No Due Date'}

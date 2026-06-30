@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { 
   UserPlus, 
   Search, 
@@ -9,7 +10,8 @@ import {
   Trash2, 
   UserCheck,
   UserX,
-  Plus
+  Plus,
+  Edit2
 } from 'lucide-react';
 import { 
   Card, 
@@ -48,9 +50,10 @@ interface UserManagementProps {
   users: UserProfile[];
   onAddUser: (user: UserProfile) => void;
   onRemoveUser: (userId: string) => void;
+  onUpdateUsers?: (updated: UserProfile[]) => void;
 }
 
-export function UserManagement({ users, onAddUser, onRemoveUser }: UserManagementProps) {
+export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers }: UserManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'all' | 'agency' | 'client'>('all');
@@ -77,6 +80,52 @@ export function UserManagement({ users, onAddUser, onRemoveUser }: UserManagemen
   });
 
   const EMOJI_PRESETS = ['💼', '🏢', '🚀', '🎨', '📊', '🌍', '🛡️', '💎', '💡', '⚡', '☕', '🎯', '🦁', '🦊', '🦉', '🍕', '🚗', '🏔️'];
+
+  // Edit User State & Handlers
+  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.DESIGNER);
+  const [editDepartment, setEditDepartment] = useState<Department>(Department.DESIGN);
+  const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [editDesignation, setEditDesignation] = useState('');
+
+  const handleStartEdit = (userProfile: UserProfile) => {
+    setEditingUser(userProfile);
+    setEditName(userProfile.name);
+    setEditEmail(userProfile.email);
+    setEditRole(userProfile.role);
+    setEditDepartment(userProfile.department);
+    setEditStatus(userProfile.status || 'active');
+    setEditAvatarUrl(userProfile.avatarUrl || '');
+    setEditDesignation(userProfile.designation || '');
+    setIsEditUserOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingUser || !editName || !editEmail) return;
+
+    const updatedUser: UserProfile = {
+      ...editingUser,
+      name: editName.trim(),
+      email: editEmail.trim(),
+      role: editRole,
+      department: editDepartment,
+      status: editStatus,
+      avatarUrl: editAvatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${editName}`,
+      designation: editDesignation.trim() || (editRole === UserRole.CLIENT ? 'Client Partner' : editRole.replace('_', ' '))
+    };
+
+    if (onUpdateUsers) {
+      const updatedList = users.map(u => u.id === editingUser.id ? updatedUser : u);
+      onUpdateUsers(updatedList);
+    }
+
+    setIsEditUserOpen(false);
+    setEditingUser(null);
+  };
 
   const handleAddUser = () => {
     if (!newUser.name || !newUser.email) return;
@@ -340,12 +389,22 @@ export function UserManagement({ users, onAddUser, onRemoveUser }: UserManagemen
                         {expert.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right pr-6">
+                    <TableCell className="text-right pr-6 space-x-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-zinc-400 hover:text-zinc-950 hover:bg-zinc-100 transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => handleStartEdit(expert)}
+                        title="Edit User Profile"
+                      >
+                        <Edit2 className="w-4 h-4 text-orange-500" />
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 
                         className="h-8 w-8 text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
                         onClick={() => onRemoveUser(expert.id)}
+                        title="Delete User"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -357,6 +416,198 @@ export function UserManagement({ users, onAddUser, onRemoveUser }: UserManagemen
           </div>
         </CardContent>
       </Card>
+
+      {/* Admin Edit User Dialog */}
+      <Dialog open={isEditUserOpen} onOpenChange={setIsEditUserOpen}>
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto rounded-2xl bg-card border-zinc-200 dark:border-zinc-850 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+              Edit User Profile: <span className="text-orange-500">{editName}</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-user-name" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Full Name</Label>
+                <Input 
+                  id="edit-user-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="rounded-xl border-zinc-200 h-10 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-user-email" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Work Email</Label>
+                <Input 
+                  id="edit-user-email"
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="rounded-xl border-zinc-200 h-10 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-user-role" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Access Role</Label>
+                  <Select 
+                    value={editRole} 
+                    onValueChange={(v: UserRole) => {
+                      const updatedDept = v === UserRole.CLIENT ? Department.MANAGEMENT : editDepartment;
+                      setEditRole(v);
+                      setEditDepartment(updatedDept);
+                    }}
+                  >
+                    <SelectTrigger id="edit-user-role" className="rounded-xl border-zinc-200 h-10 text-xs font-semibold">
+                      <SelectValue placeholder="Select Role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(UserRole).map(([key, value]) => (
+                        <SelectItem key={key} value={value}>{value.replace('_', ' ')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-user-dept" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Primary Department</Label>
+                  <Select 
+                    value={editDepartment} 
+                    onValueChange={(v: Department) => setEditDepartment(v)}
+                  >
+                    <SelectTrigger id="edit-user-dept" className="rounded-xl border-zinc-200 h-10 text-xs font-semibold">
+                      <SelectValue placeholder="Select Dept" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(Department).map(d => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-user-desig" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Designation / Role Title</Label>
+                  <Input 
+                    id="edit-user-desig"
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    placeholder={editRole.replace('_', ' ')}
+                    className="rounded-xl border-zinc-200 h-10 text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-user-status" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Status</Label>
+                  <Select 
+                    value={editStatus} 
+                    onValueChange={(v: 'active' | 'inactive') => setEditStatus(v)}
+                  >
+                    <SelectTrigger id="edit-user-status" className="rounded-xl border-zinc-200 h-10 text-xs font-semibold">
+                      <SelectValue placeholder="Select Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">🟢 Active</SelectItem>
+                      <SelectItem value="inactive">🔴 Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Profile Photo Option */}
+              <div className="bg-zinc-50 dark:bg-zinc-900 p-4 rounded-xl border border-zinc-150 dark:border-zinc-800 gap-3 flex flex-col">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Profile Photo / Logo</Label>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border flex items-center justify-center text-2xl shadow-inner font-mono select-none overflow-hidden shrink-0">
+                    {editAvatarUrl && (editAvatarUrl.startsWith('http') || editAvatarUrl.startsWith('/') || editAvatarUrl.startsWith('data:')) ? (
+                      <img src={editAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{editAvatarUrl || '👤'}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <Input 
+                      placeholder="Paste Logo URL or Type Custom Emoji" 
+                      className="rounded-xl h-9 text-xs border-zinc-200 bg-white"
+                      value={editAvatarUrl}
+                      onChange={(e) => setEditAvatarUrl(e.target.value)}
+                    />
+                    
+                    {/* Drag & Drop File Upload */}
+                    <label className="flex flex-col items-center justify-center h-10 px-3 py-1 bg-white dark:bg-zinc-950 border border-dashed border-zinc-300 dark:border-zinc-850 rounded-xl cursor-pointer hover:border-brand-secondary transition-all">
+                      <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider text-center">
+                        Upload Image File (<span className="text-orange-500">Browse</span>)
+                      </span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast.error("File size exceeds 2MB limit!");
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setEditAvatarUrl(reader.result as string);
+                              toast.success("Profile photo uploaded!");
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[8px] uppercase font-extrabold tracking-widest text-zinc-400 block">Quick Emojis / Logo Presets</span>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 bg-white dark:bg-zinc-950 rounded-lg border">
+                    {EMOJI_PRESETS.map((emoji) => (
+                      <button
+                        type="button"
+                        key={emoji}
+                        onClick={() => setEditAvatarUrl(emoji)}
+                        className={cn(
+                          "w-7 h-7 flex items-center justify-center text-sm rounded bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all border",
+                          editAvatarUrl === emoji ? "border-zinc-900 bg-zinc-100 dark:border-white" : "border-transparent"
+                        )}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-4 border-t mt-4 flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditUserOpen(false)}
+              className="rounded-xl h-10 text-xs font-bold uppercase tracking-wider px-4 cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit}
+              className="bg-zinc-900 hover:bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 rounded-xl h-10 text-xs font-bold uppercase tracking-wider px-6 cursor-pointer"
+            >
+              Save Profile Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

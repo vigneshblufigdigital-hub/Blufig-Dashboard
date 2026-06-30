@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { UserProfile, UserRole, Department } from '../../types';
+import { UserProfile, UserRole, Department, ADMIN_ROLES } from '../../types';
 import { MOCK_USERS } from '../../mockData';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -33,6 +33,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from '@/components/ui/dialog';
 
 // Preset Avatars (Emoji Glyphs) for awesome UX
 const PRESET_AVATARS = [
@@ -69,6 +76,77 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
   
   // Selected tree node for detail popover / side drawer
   const [selectedTreeMember, setSelectedTreeMember] = useState<UserProfile | null>(user);
+
+  // Admin Editing Member states
+  const [isEditingMember, setIsEditingMember] = useState(false);
+  const [editMemberId, setEditMemberId] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editDesignation, setEditDesignation] = useState('');
+  const [editDepartment, setEditDepartment] = useState<Department>(Department.MANAGEMENT);
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.ACCOUNT_MANAGER);
+  const [editSkills, setEditSkills] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [editWorkLocation, setEditWorkLocation] = useState<'In Office' | 'Work From Home' | 'Leave' | 'Appear Away'>('In Office');
+  const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
+
+  const handleStartEditMember = (member: UserProfile) => {
+    setEditMemberId(member.id);
+    setEditName(member.name);
+    setEditEmail(member.email);
+    setEditDesignation(member.designation || '');
+    setEditDepartment(member.department);
+    setEditRole(member.role);
+    setEditSkills((member.skillTags || []).join(', '));
+    setEditAvatarUrl(member.avatarUrl || '');
+    setEditWorkLocation(member.workLocation || 'In Office');
+    setEditStatus(member.status || 'active');
+    setIsEditingMember(true);
+  };
+
+  const handleSaveMemberEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editName.trim()) {
+      toast.error("Name cannot be empty!");
+      return;
+    }
+    if (!editEmail.trim()) {
+      toast.error("Email cannot be empty!");
+      return;
+    }
+
+    const updatedMember: UserProfile = {
+      id: editMemberId,
+      name: editName.trim(),
+      email: editEmail.trim(),
+      designation: editDesignation.trim() || 'Specialist',
+      department: editDepartment,
+      role: editRole,
+      skillTags: editSkills.split(',').map(s => s.trim()).filter(Boolean),
+      avatarUrl: editAvatarUrl || '👨‍💻',
+      workLocation: editWorkLocation,
+      status: editStatus
+    };
+
+    // Update overall list of users
+    const updatedList = usersList.map(u => u.id === editMemberId ? updatedMember : u);
+    onUpdateUsers(updatedList);
+
+    // If we updated the current logged-in user, sync context and localStorage
+    if (user.id === editMemberId) {
+      setUser(updatedMember);
+      localStorage.setItem('blufig_logged_user', JSON.stringify(updatedMember));
+    }
+
+    // Update current selected teammate in the side panel
+    if (selectedTreeMember?.id === editMemberId) {
+      setSelectedTreeMember(updatedMember);
+    }
+
+    setIsEditingMember(false);
+    toast.success(`Profile for ${updatedMember.name} has been updated successfully!`);
+  };
 
   // Auto-fill custom avatar if it's not a standard preset
   React.useEffect(() => {
@@ -776,7 +854,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                         
                         {/* Work Location below designation in side panel */}
                         {selectedTreeMember && (
-                          <div className="mt-1.5 flex justify-center">
+                          <div className="mt-1.5 flex flex-col items-center space-y-2">
                             <span className={cn(
                               "inline-flex items-center text-[8px] font-black uppercase tracking-wider py-0.5 px-2.5 rounded-full border shadow-sm",
                               (selectedTreeMember.workLocation || 'In Office').toLowerCase().includes('home') ? "bg-blue-500/5 text-blue-600 border-blue-500/10 dark:text-blue-400" :
@@ -793,6 +871,18 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                               )} />
                               {selectedTreeMember.workLocation || 'In Office'}
                             </span>
+
+                            {ADMIN_ROLES.includes(user.role) && (
+                              <Button
+                                size="sm"
+                                type="button"
+                                onClick={() => handleStartEditMember(selectedTreeMember)}
+                                className="text-[9px] font-extrabold uppercase tracking-wider h-7 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 px-3 py-1 rounded-lg cursor-pointer flex items-center shadow-sm"
+                              >
+                                <Settings className="w-3 h-3 mr-1 text-orange-500" />
+                                Edit Full Profile
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -836,6 +926,236 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
           )}
         </AnimatePresence>
       </div>
+
+      {/* Admin Edit Member Dialog */}
+      <Dialog open={isEditingMember} onOpenChange={setIsEditingMember}>
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto rounded-2xl bg-card border-zinc-200 dark:border-zinc-850 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+              Edit Employee Profile: <span className="text-orange-500">{editName}</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveMemberEdit} className="space-y-5 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              
+              {/* Left Column Fields */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-name" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Full Name</Label>
+                  <Input 
+                    id="edit-name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 h-10 text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-email" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Work Email</Label>
+                  <Input 
+                    id="edit-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 h-10 text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-desig" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Designation / Role Title</Label>
+                  <Input 
+                    id="edit-desig"
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 h-10 text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-dept" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Assigned Department</Label>
+                  <Select 
+                    value={editDepartment} 
+                    onValueChange={(val: Department) => setEditDepartment(val)}
+                  >
+                    <SelectTrigger id="edit-dept" className="h-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-xs font-semibold bg-white dark:bg-zinc-950">
+                      <SelectValue placeholder="Select Department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(Department).map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-role" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Strategic Role & Access</Label>
+                  <Select 
+                    value={editRole} 
+                    onValueChange={(val: UserRole) => setEditRole(val)}
+                  >
+                    <SelectTrigger id="edit-role" className="h-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-xs font-semibold bg-white dark:bg-zinc-950">
+                      <SelectValue placeholder="Select Access Role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.values(UserRole).map((role) => (
+                        <SelectItem key={role} value={role}>{role.replace('_', ' ')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Right Column Fields */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Profile Image / Photo</Label>
+                  
+                  <div className="flex items-center space-x-3">
+                    {/* Avatar Preview */}
+                    <div className="w-12 h-12 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center overflow-hidden shrink-0">
+                      {editAvatarUrl && (editAvatarUrl.startsWith('http') || editAvatarUrl.startsWith('/') || editAvatarUrl.startsWith('data:')) ? (
+                        <img 
+                          src={editAvatarUrl} 
+                          alt="Avatar Preview" 
+                          className="w-full h-full object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-2xl select-none">{editAvatarUrl || '👤'}</span>
+                      )}
+                    </div>
+                    
+                    {/* Upload File */}
+                    <div className="flex-1">
+                      <label className="flex flex-col items-center justify-center h-12 px-3 py-1 bg-white dark:bg-zinc-950 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl cursor-pointer hover:border-brand-secondary hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-all">
+                        <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider text-center">
+                          Upload file (<span className="text-brand-secondary">Browse</span>)
+                        </span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 2 * 1024 * 1024) {
+                                toast.error("File size exceeds 2MB limit!");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                const resultStr = reader.result as string;
+                                setEditAvatarUrl(resultStr);
+                                toast.success("Profile photo uploaded successfully!");
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <Input 
+                    placeholder="Or paste profile image URL directly..." 
+                    className="rounded-xl h-9 text-xs border-zinc-200 bg-white dark:bg-zinc-950 mt-2"
+                    value={editAvatarUrl}
+                    onChange={(e) => setEditAvatarUrl(e.target.value)}
+                  />
+
+                  {/* Preset Quick Select */}
+                  <div className="space-y-1 mt-1">
+                    <span className="text-[8px] uppercase font-black tracking-widest text-zinc-400">Quick Presets</span>
+                    <div className="flex flex-wrap gap-1 p-1 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-150 dark:border-zinc-850">
+                      {['👨‍💻', '👩‍💻', '🚀', '🎨', '⚡', '📈', '🌟', '🦁', '🦉', '🍕', '🎯', '💡'].map((emoji) => (
+                        <button
+                          type="button"
+                          key={emoji}
+                          onClick={() => setEditAvatarUrl(emoji)}
+                          className={cn(
+                            "w-6 h-6 flex items-center justify-center text-xs rounded bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all border",
+                            editAvatarUrl === emoji ? "border-brand-secondary bg-orange-50/50 dark:bg-orange-950/25" : "border-zinc-200/50 dark:border-zinc-800"
+                          )}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-location" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Work Location</Label>
+                    <Select 
+                      value={editWorkLocation} 
+                      onValueChange={(val: any) => setEditWorkLocation(val)}
+                    >
+                      <SelectTrigger id="edit-location" className="h-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-xs font-semibold bg-white dark:bg-zinc-950">
+                        <SelectValue placeholder="Location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="In Office">🏢 In Office</SelectItem>
+                        <SelectItem value="Work From Home">🏠 Home</SelectItem>
+                        <SelectItem value="Leave">🌴 Leave</SelectItem>
+                        <SelectItem value="Appear Away">🌙 Away</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-status" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Status</Label>
+                    <Select 
+                      value={editStatus} 
+                      onValueChange={(val: any) => setEditStatus(val)}
+                    >
+                      <SelectTrigger id="edit-status" className="h-10 rounded-xl border-zinc-200 dark:border-zinc-800 text-xs font-semibold bg-white dark:bg-zinc-950">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">🟢 Active</SelectItem>
+                        <SelectItem value="inactive">🔴 Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-skills" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Expertise Specialty Skills</Label>
+                  <Input 
+                    id="edit-skills"
+                    placeholder="React, Design, Performance, Copywriting"
+                    value={editSkills}
+                    onChange={(e) => setEditSkills(e.target.value)}
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 h-10 text-xs font-semibold"
+                  />
+                  <span className="text-[9px] text-zinc-400 block leading-tight">Separate skills with commas (e.g. SEO, HubSpot, UI Design)</span>
+                </div>
+              </div>
+
+            </div>
+
+            <DialogFooter className="pt-4 border-t border-zinc-150 dark:border-zinc-800 flex items-center justify-end space-x-2">
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={() => setIsEditingMember(false)}
+                className="rounded-xl text-xs font-bold uppercase tracking-wider h-10 px-4 border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit"
+                className="rounded-xl text-xs font-bold uppercase tracking-wider h-10 px-6 bg-zinc-900 hover:bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 cursor-pointer"
+              >
+                Save Profile Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

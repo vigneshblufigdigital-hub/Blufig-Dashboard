@@ -9,12 +9,25 @@ import {
   MoreVertical,
   ExternalLink,
   Lock,
-  Pin
+  Pin,
+  CheckCircle,
+  AlertTriangle,
+  Play,
+  Trash2,
+  UserPlus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MOCK_USERS } from '@/src/mockData';
-import { Project, Task } from '@/src/types';
+import { Project, Task, UserProfile, UserRole, ADMIN_ROLES } from '@/src/types';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function ProjectBoard({ 
   onProjectClick, 
@@ -22,7 +35,12 @@ export function ProjectBoard({
   tasks = [],
   onAddProjectClick,
   pinnedProjectIds = [],
-  onTogglePin
+  onTogglePin,
+  users,
+  onUpdateProjectAM,
+  onDeleteProject,
+  onUpdateProjectStatus,
+  currentUser
 }: { 
   onProjectClick?: (id: string) => void;
   projects: Project[];
@@ -30,11 +48,19 @@ export function ProjectBoard({
   onAddProjectClick?: () => void;
   pinnedProjectIds?: string[];
   onTogglePin?: (id: string) => void;
+  users?: UserProfile[];
+  onUpdateProjectAM?: (projectId: string, amId: string) => void;
+  onDeleteProject?: (projectId: string) => void;
+  onUpdateProjectStatus?: (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending') => void;
+  currentUser?: UserProfile;
 }) {
+  const isAdminUser = currentUser && ADMIN_ROLES.includes(currentUser.role);
+  const eligibleAssignees = (users || MOCK_USERS).filter(u => u.role !== UserRole.CLIENT);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       {projects.map((project) => {
-        const am = MOCK_USERS.find(u => u.id === project.accountManagerId);
+        const am = (users || MOCK_USERS).find(u => u.id === project.accountManagerId);
         
         // Dynamic Task Progress Calculation
         const projectTasks = tasks.filter(t => t.projectId === project.id);
@@ -115,17 +141,73 @@ export function ProjectBoard({
                   >
                     <Pin className={cn("w-4 h-4", isPinned && "fill-orange-500")} />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-zinc-400"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Additional menu logic if needed
-                    }}
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48 border-zinc-200 dark:border-zinc-800" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-widest text-zinc-450">Project Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      
+                      {onTogglePin && (
+                        <DropdownMenuItem onClick={() => onTogglePin(project.id)} className="text-xs cursor-pointer">
+                          <Pin className="w-3.5 h-3.5 mr-2 text-zinc-550" />
+                          <span>{isPinned ? "Unpin Project" : "Pin Project"}</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      {currentUser && onUpdateProjectAM && project.accountManagerId !== currentUser.id && currentUser.role !== UserRole.CLIENT && (
+                        <DropdownMenuItem onClick={() => onUpdateProjectAM(project.id, currentUser.id)} className="text-xs cursor-pointer">
+                          <UserPlus className="w-3.5 h-3.5 mr-2 text-zinc-550" />
+                          <span>Assign to Me</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      {onUpdateProjectStatus && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="text-[9px] uppercase font-bold tracking-widest text-zinc-450 px-2 py-1">Set Status</DropdownMenuLabel>
+                          {project.status !== 'Active' && (
+                            <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'Active')} className="text-xs cursor-pointer">
+                              <Play className="w-3.5 h-3.5 mr-2 text-emerald-550" />
+                              <span>Set Active</span>
+                            </DropdownMenuItem>
+                          )}
+                          {project.status !== 'Completed' && (
+                            <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'Completed')} className="text-xs cursor-pointer">
+                              <CheckCircle className="w-3.5 h-3.5 mr-2 text-indigo-550" />
+                              <span>Set Completed</span>
+                            </DropdownMenuItem>
+                          )}
+                          {project.status !== 'On Hold' && (
+                            <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'On Hold')} className="text-xs cursor-pointer">
+                              <AlertTriangle className="w-3.5 h-3.5 mr-2 text-amber-550" />
+                              <span>Set On Hold</span>
+                            </DropdownMenuItem>
+                          )}
+                        </>
+                      )}
+
+                      {isAdminUser && onDeleteProject && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => onDeleteProject(project.id)} 
+                            className="text-xs cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-2 text-red-500" />
+                            <span>Delete Project</span>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </CardHeader>
@@ -140,11 +222,30 @@ export function ProjectBoard({
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2 p-2 rounded-lg bg-zinc-50 border border-zinc-100">
-                  <Users className="w-3 h-3 text-zinc-400" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">Project AM</p>
-                    <p className="text-xs font-semibold truncate">{am?.name || 'Unassigned'}</p>
+                <div className="flex items-center space-x-2 p-2 rounded-lg bg-zinc-50 border border-zinc-100 min-w-0">
+                  <Users className="w-3 h-3 text-zinc-400 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">Project AM / Assignee</p>
+                    {isAdminUser ? (
+                      <select
+                        value={project.accountManagerId || ''}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          onUpdateProjectAM?.(project.id, e.target.value);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs font-semibold bg-transparent border-none outline-none focus:ring-0 p-0 m-0 text-zinc-900 dark:text-zinc-100 w-full cursor-pointer pr-2"
+                      >
+                        <option value="" className="bg-white dark:bg-zinc-900">Unassigned</option>
+                        {eligibleAssignees.map(u => (
+                          <option key={u.id} value={u.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
+                            {u.name} ({u.role.replace('_', ' ')})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-xs font-semibold truncate">{am?.name || 'Unassigned'}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 p-2 rounded-lg bg-zinc-50 border border-zinc-100">

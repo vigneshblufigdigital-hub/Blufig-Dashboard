@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { MOCK_USERS } from '@/src/mockData';
-import { Mail, Briefcase, Tag, Shield, ShieldAlert, CheckCircle2, XCircle, Plus, UserPlus } from 'lucide-react';
+import { Mail, Briefcase, Tag, Shield, ShieldAlert, CheckCircle2, XCircle, Plus, UserPlus, BarChart3, TrendingUp, UserCheck, AlertCircle, Clock, ArrowRight } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserRole, UserProfile, Department, ADMIN_ROLES } from '../../types';
+import { UserRole, UserProfile, Department, ADMIN_ROLES, Task, TaskStatus } from '../../types';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cell } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -27,9 +28,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface TeamViewProps {
   users?: UserProfile[];
   setUsers?: React.Dispatch<React.SetStateAction<UserProfile[]>>;
+  tasks?: Task[];
 }
 
-export function TeamView({ users: propUsers, setUsers: propSetUsers }: TeamViewProps = {}) {
+export function TeamView({ users: propUsers, setUsers: propSetUsers, tasks = [] }: TeamViewProps = {}) {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser && ADMIN_ROLES.includes(currentUser.role);
   
@@ -49,6 +51,31 @@ export function TeamView({ users: propUsers, setUsers: propSetUsers }: TeamViewP
 
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [tempTag, setTempTag] = useState('');
+  const [selectedDept, setSelectedDept] = useState<Department | null>(null);
+
+  const getTaskDepartment = (task: Task) => {
+    const assignee = users.find(u => u.id === task.assigneeId);
+    if (assignee && assignee.department) {
+      return assignee.department;
+    }
+    const typeLower = (task.type || '').toLowerCase();
+    if (typeLower.includes('web') || typeLower.includes('dev') || typeLower.includes('tech') || typeLower.includes('database')) {
+      return Department.WEB_DEVELOPMENT;
+    }
+    if (typeLower.includes('design') || typeLower.includes('creative') || typeLower.includes('ui') || typeLower.includes('ux')) {
+      return Department.DESIGN;
+    }
+    if (typeLower.includes('content') || typeLower.includes('write') || typeLower.includes('copy') || typeLower.includes('seo')) {
+      return Department.CONTENT;
+    }
+    if (typeLower.includes('hubspot') || typeLower.includes('crm') || typeLower.includes('marketing automation')) {
+      return Department.HUBSPOT;
+    }
+    if (typeLower.includes('social') || typeLower.includes('ads') || typeLower.includes('paid') || typeLower.includes('digital') || typeLower.includes('media')) {
+      return Department.DIGITAL;
+    }
+    return Department.MANAGEMENT;
+  };
   const [editTempTag, setEditTempTag] = useState('');
 
   const agencyUsers = users.filter(u => u.role !== UserRole.CLIENT);
@@ -106,9 +133,15 @@ export function TeamView({ users: propUsers, setUsers: propSetUsers }: TeamViewP
             </TabsTrigger>
             <TabsTrigger 
               value="clients"
-              className="px-6 py-3.5 rounded-lg text-xs font-bold uppercase tracking-tighter data-[state=active]:bg-zinc-900 data-[state=active]:text-white dark:data-[state=active]:bg-zinc-100 dark:data-[state=active]:text-zinc-900 shadow-none data-[state=active]:shadow-md transition-all cursor-pointer"
+              className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-tighter data-[state=active]:bg-zinc-900 data-[state=active]:text-white dark:data-[state=active]:bg-zinc-100 dark:data-[state=active]:text-zinc-900 shadow-none data-[state=active]:shadow-md transition-all cursor-pointer"
             >
               Clients
+            </TabsTrigger>
+            <TabsTrigger 
+              value="capacity"
+              className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-tighter data-[state=active]:bg-zinc-900 data-[state=active]:text-white dark:data-[state=active]:bg-zinc-100 dark:data-[state=active]:text-zinc-900 shadow-none data-[state=active]:shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              📊 Department Capacity
             </TabsTrigger>
           </TabsList>
 
@@ -417,6 +450,351 @@ export function TeamView({ users: propUsers, setUsers: propSetUsers }: TeamViewP
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="capacity">
+          {(() => {
+            // Active tasks calculation
+            const activeTasksList = (tasks || []).filter(t => 
+              t.status !== TaskStatus.DONE && 
+              t.status !== TaskStatus.APPROVED && 
+              t.status !== TaskStatus.CANCELLED
+            );
+
+            // Initialize department workload counts
+            const departmentWorkload: Record<Department, { total: number; open: number; inProgress: number; review: number; revision: number; blocked: number }> = {} as any;
+            Object.values(Department).forEach(dept => {
+              departmentWorkload[dept] = { total: 0, open: 0, inProgress: 0, review: 0, revision: 0, blocked: 0 };
+            });
+
+            // Calculate workloads
+            activeTasksList.forEach(task => {
+              const dept = getTaskDepartment(task);
+              if (departmentWorkload[dept]) {
+                departmentWorkload[dept].total += 1;
+                if (task.status === TaskStatus.OPEN) departmentWorkload[dept].open += 1;
+                else if (task.status === TaskStatus.IN_PROGRESS) departmentWorkload[dept].inProgress += 1;
+                else if (task.status === TaskStatus.REVIEW) departmentWorkload[dept].review += 1;
+                else if (task.status === TaskStatus.REVISION_REQUESTED) departmentWorkload[dept].revision += 1;
+                else if (task.status === TaskStatus.BLOCKED) departmentWorkload[dept].blocked += 1;
+              }
+            });
+
+            // Compile capacity details per department
+            const capacityData = Object.values(Department).map(dept => {
+              const deptUsers = users.filter(u => u.department === dept && u.role !== UserRole.CLIENT);
+              const userCount = deptUsers.length;
+              const taskCount = departmentWorkload[dept]?.total || 0;
+              
+              // Max capacity = userCount * 4 active tasks. Default to 4 if empty dept.
+              const maxCapacity = Math.max(userCount * 4, 4);
+              const utilizationRate = Math.min(Math.round((taskCount / maxCapacity) * 100), 150);
+              
+              let status: 'Under-utilized' | 'Optimal' | 'At Capacity' | 'Overloaded' = 'Optimal';
+              let statusColor = 'text-emerald-650 bg-emerald-500/5 border-emerald-500/20 dark:text-emerald-400 dark:bg-emerald-950/20 dark:border-emerald-900/40';
+              let progressBarColor = 'bg-emerald-500';
+              
+              if (userCount === 0 && taskCount > 0) {
+                status = 'Overloaded';
+                statusColor = 'text-rose-650 bg-rose-500/5 border-rose-500/20 dark:text-rose-400 dark:bg-rose-950/20 dark:border-rose-900/40';
+                progressBarColor = 'bg-rose-500';
+              } else if (utilizationRate > 100) {
+                status = 'Overloaded';
+                statusColor = 'text-rose-650 bg-rose-500/5 border-rose-500/20 dark:text-rose-400 dark:bg-rose-950/20 dark:border-rose-900/40';
+                progressBarColor = 'bg-rose-500';
+              } else if (utilizationRate >= 80) {
+                status = 'At Capacity';
+                statusColor = 'text-amber-650 bg-amber-500/5 border-amber-500/20 dark:text-amber-400 dark:bg-amber-950/20 dark:border-amber-900/40';
+                progressBarColor = 'bg-amber-500';
+              } else if (utilizationRate < 35 || taskCount === 0) {
+                status = 'Under-utilized';
+                statusColor = 'text-zinc-500 bg-zinc-500/5 border-zinc-500/20 dark:text-zinc-400 dark:bg-zinc-900/20 dark:border-zinc-800';
+                progressBarColor = 'bg-zinc-400 dark:bg-zinc-600';
+              }
+
+              return {
+                department: dept,
+                activeTasks: taskCount,
+                usersCount: userCount,
+                utilizationRate,
+                status,
+                statusColor,
+                progressBarColor,
+                open: departmentWorkload[dept]?.open || 0,
+                inProgress: departmentWorkload[dept]?.inProgress || 0,
+                review: departmentWorkload[dept]?.review || 0,
+                revision: departmentWorkload[dept]?.revision || 0,
+                blocked: departmentWorkload[dept]?.blocked || 0,
+              };
+            }).sort((a, b) => b.activeTasks - a.activeTasks);
+
+            const activeDept = selectedDept || capacityData[0]?.department || Department.CONTENT;
+            const selectedDeptData = capacityData.find(d => d.department === activeDept);
+            const selectedDeptTeammates = users.filter(u => u.department === activeDept && u.role !== UserRole.CLIENT);
+
+            return (
+              <div className="space-y-6">
+                {/* 1. Header Overview Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <Card className="border-zinc-150/80 dark:border-zinc-850 shadow-sm">
+                    <CardContent className="pt-5 flex items-center gap-4">
+                      <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-xl text-zinc-850 dark:text-zinc-100 shrink-0">
+                        <BarChart3 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Total Active Tasks</p>
+                        <h4 className="text-2xl font-black tracking-tight mt-0.5">{activeTasksList.length}</h4>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-zinc-150/80 dark:border-zinc-850 shadow-sm">
+                    <CardContent className="pt-5 flex items-center gap-4">
+                      <div className="p-3 bg-rose-50 dark:bg-rose-950/20 rounded-xl text-rose-600 dark:text-rose-400 shrink-0">
+                        <TrendingUp className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Heaviest Department</p>
+                        <h4 className="text-base font-black tracking-tight mt-0.5 truncate max-w-[200px]">
+                          {capacityData[0]?.department || 'None'} ({capacityData[0]?.activeTasks || 0} tasks)
+                        </h4>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-zinc-150/80 dark:border-zinc-850 shadow-sm">
+                    <CardContent className="pt-5 flex items-center gap-4">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-xl text-blue-600 dark:text-blue-400 shrink-0">
+                        <UserCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Agency Staff Active</p>
+                        <h4 className="text-2xl font-black tracking-tight mt-0.5">
+                          {users.filter(u => u.role !== UserRole.CLIENT).length} Members
+                        </h4>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* 2. Main Interactive Workspace Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* Left Column - Horizontal Bar Chart */}
+                  <Card className="lg:col-span-7 border-zinc-150 dark:border-zinc-850 shadow-sm">
+                    <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base font-black tracking-tight">Department Active Workload</CardTitle>
+                        <p className="text-[10px] text-zinc-400 font-bold mt-1 uppercase tracking-wider">
+                          Click a department bar to analyze team resource constraints
+                        </p>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="w-full h-[320px] flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            layout="vertical"
+                            data={capacityData}
+                            margin={{ top: 10, right: 15, left: 20, bottom: 5 }}
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                setSelectedDept(state.activeLabel as Department);
+                              }
+                            }}
+                          >
+                            <XAxis type="number" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis 
+                              dataKey="department" 
+                              type="category" 
+                              stroke="#888888" 
+                              fontSize={10} 
+                              tickLine={false} 
+                              axisLine={false} 
+                              width={110}
+                            />
+                            <Tooltip 
+                              cursor={{ fill: 'rgba(240, 240, 245, 0.3)' }} 
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const data = payload[0].payload;
+                                  return (
+                                    <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 rounded-xl shadow-lg">
+                                      <p className="font-extrabold text-xs text-zinc-900 dark:text-zinc-50 mb-1">{data.department}</p>
+                                      <div className="space-y-1 text-[10px] font-bold text-zinc-500">
+                                        <p className="text-blue-500 flex justify-between gap-4"><span>In Progress:</span> <span>{data.inProgress}</span></p>
+                                        <p className="text-zinc-400 flex justify-between gap-4"><span>Open / Todo:</span> <span>{data.open}</span></p>
+                                        <p className="text-amber-500 flex justify-between gap-4"><span>In Review:</span> <span>{data.review}</span></p>
+                                        <p className="text-pink-500 flex justify-between gap-4"><span>Revision Req:</span> <span>{data.revision}</span></p>
+                                        <p className="text-rose-500 flex justify-between gap-4"><span>Blocked:</span> <span>{data.blocked}</span></p>
+                                        <p className="border-t pt-1 mt-1 text-zinc-800 dark:text-zinc-200 flex justify-between gap-4 font-black">
+                                          <span>Total Active:</span> <span>{data.activeTasks}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Legend 
+                              verticalAlign="bottom" 
+                              height={36} 
+                              iconType="circle" 
+                              iconSize={7}
+                              formatter={(value) => <span className="text-[9px] font-extrabold text-zinc-500 uppercase tracking-widest">{value}</span>}
+                            />
+                            <Bar dataKey="inProgress" name="In Progress" stackId="a" fill="#3b82f6" />
+                            <Bar dataKey="open" name="Open / Todo" stackId="a" fill="#9ca3af" />
+                            <Bar dataKey="review" name="In Review" stackId="a" fill="#f59e0b" />
+                            <Bar dataKey="revision" name="Revision Requested" stackId="a" fill="#ec4899" />
+                            <Bar dataKey="blocked" name="Blocked" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Manual department list selector fallback */}
+                      <div className="mt-4 pt-4 border-t dark:border-zinc-850 flex flex-wrap gap-2">
+                        {capacityData.map(d => (
+                          <button
+                            key={d.department}
+                            onClick={() => setSelectedDept(d.department)}
+                            className={cn(
+                              "text-[10px] font-bold uppercase tracking-wider py-1.5 px-3 rounded-xl border transition-all cursor-pointer",
+                              activeDept === d.department
+                                ? "bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-900"
+                                : "bg-white border-zinc-150 hover:bg-zinc-50 text-zinc-500 dark:bg-zinc-950 dark:border-zinc-850 dark:hover:bg-zinc-900"
+                            )}
+                          >
+                            {d.department} ({d.activeTasks})
+                          </button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Right Column - Selected Department Breakdown & Load Allocator */}
+                  <Card className="lg:col-span-5 border-zinc-150 dark:border-zinc-850 shadow-sm flex flex-col">
+                    <CardHeader className="pb-3 border-b dark:border-zinc-850">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-black tracking-tight truncate max-w-[200px]">
+                          🔎 {activeDept} Team Detail
+                        </CardTitle>
+                        {selectedDeptData && (
+                          <span className={cn(
+                            "text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border",
+                            selectedDeptData.statusColor
+                          )}>
+                            {selectedDeptData.status}
+                          </span>
+                        )}
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="pt-4 flex-1 flex flex-col justify-between space-y-4">
+                      
+                      {/* Department capacity utilization breakdown */}
+                      {selectedDeptData && (
+                        <div className="bg-zinc-50 dark:bg-zinc-900 p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-850">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                            <span>Capacity Utilization</span>
+                            <span className="font-mono text-zinc-700 dark:text-zinc-300">{selectedDeptData.utilizationRate}%</span>
+                          </div>
+                          <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                            <div 
+                              className={cn("h-full rounded-full transition-all duration-300", selectedDeptData.progressBarColor)} 
+                              style={{ width: `${selectedDeptData.utilizationRate}%` }} 
+                            />
+                          </div>
+                          <p className="text-[9px] text-zinc-500 mt-2 font-medium leading-normal">
+                            Assigned <strong>{selectedDeptData.activeTasks} active tasks</strong> across <strong>{selectedDeptData.usersCount} team members</strong> in this department.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Teammates task workload lists */}
+                      <div className="flex-1 overflow-y-auto max-h-[240px] pr-1 space-y-3">
+                        <h5 className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 pb-1 border-b border-dashed dark:border-zinc-800">
+                          Individual Workloads
+                        </h5>
+                        {selectedDeptTeammates.length === 0 ? (
+                          <div className="text-center py-6 text-zinc-400 text-xs">
+                            <AlertCircle className="w-5 h-5 mx-auto mb-2 text-zinc-350" />
+                            No agency staff assigned to {activeDept} yet.
+                          </div>
+                        ) : (
+                          selectedDeptTeammates.map(teammate => {
+                            const teammateTasks = activeTasksList.filter(t => t.assigneeId === teammate.id);
+                            const teammateLoadPct = Math.min((teammateTasks.length / 4) * 100, 100);
+                            
+                            return (
+                              <div key={teammate.id} className="p-3 bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850 rounded-xl space-y-2">
+                                <div className="flex items-center gap-2.5">
+                                  <Avatar className="w-8 h-8 shrink-0">
+                                    {teammate.avatarUrl && teammate.avatarUrl.length <= 4 ? (
+                                      <AvatarFallback className="text-xs bg-zinc-100 font-bold">
+                                        {teammate.avatarUrl}
+                                      </AvatarFallback>
+                                    ) : (
+                                      <>
+                                        <AvatarImage src={teammate.avatarUrl} />
+                                        <AvatarFallback className="text-xs bg-zinc-900 text-white">
+                                          {teammate.name.charAt(0)}
+                                        </AvatarFallback>
+                                      </>
+                                    )}
+                                  </Avatar>
+                                  <div className="min-w-0 flex-1">
+                                    <h6 className="text-xs font-black text-zinc-850 dark:text-zinc-100 truncate">{teammate.name}</h6>
+                                    <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">{teammate.designation}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-[10px] font-mono font-black text-zinc-800 dark:text-zinc-200">
+                                      {teammateTasks.length} active
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Mini task progress bar */}
+                                <div>
+                                  <div className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-full h-1 overflow-hidden">
+                                    <div 
+                                      className={cn(
+                                        "h-full rounded-full",
+                                        teammateTasks.length > 4 ? "bg-rose-500" : teammateTasks.length >= 3 ? "bg-amber-500" : "bg-emerald-500"
+                                      )}
+                                      style={{ width: `${teammateLoadPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Active Task Titles list */}
+                                {teammateTasks.length > 0 && (
+                                  <div className="pt-1.5 border-t border-dashed dark:border-zinc-900 space-y-1">
+                                    {teammateTasks.slice(0, 3).map(task => (
+                                      <div key={task.id} className="flex items-center justify-between text-[9px] text-zinc-500 dark:text-zinc-400">
+                                        <span className="truncate max-w-[150px] font-medium">• {task.name}</span>
+                                        <span className="px-1 bg-zinc-100 dark:bg-zinc-900 rounded text-[7px] font-bold uppercase tracking-tight shrink-0">{task.status}</span>
+                                      </div>
+                                    ))}
+                                    {teammateTasks.length > 3 && (
+                                      <p className="text-[8px] text-zinc-400 font-extrabold italic text-right">+{teammateTasks.length - 3} more active tasks</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                    </CardContent>
+                  </Card>
+
+                </div>
+              </div>
+            );
+          })()}
         </TabsContent>
       </Tabs>
 

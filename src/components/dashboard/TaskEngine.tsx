@@ -30,7 +30,8 @@ import {
   RefreshCw,
   Sparkles,
   AlarmClock,
-  BellRing
+  BellRing,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1733,9 +1734,27 @@ export function TaskEngine({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center text-xs font-semibold text-zinc-600 bg-zinc-100 px-2 py-1 rounded-md w-fit">
-                        {task.timeEstimate ? `${task.timeEstimate}h` : '—'}
-                      </div>
+                      {(() => {
+                        const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
+                        const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
+                        return (
+                          <div className="flex flex-col gap-1 select-none">
+                            <div className={cn(
+                              "flex items-center text-xs font-semibold px-2 py-1 rounded-md w-fit border",
+                              isExceeded 
+                                ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
+                                : "text-zinc-650 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900 border-transparent"
+                            )}>
+                              {task.timeEstimate ? `${task.timeEstimate}h` : '—'}
+                            </div>
+                            {isExceeded && (
+                              <span className="text-[9px] font-extrabold uppercase text-rose-500 flex items-center gap-0.5 whitespace-nowrap">
+                                ⚠️ +{(loggedHours - task.timeEstimate).toFixed(1)}h over
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center space-x-2">
@@ -2188,6 +2207,19 @@ export function TaskEngine({
                             <div className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold uppercase tracking-widest mt-1">
                               {task.type}
                             </div>
+                            {(() => {
+                              const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
+                              const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
+                              if (isExceeded) {
+                                return (
+                                  <div className="mt-2.5 px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5 w-full select-none" onClick={(e) => e.stopPropagation()}>
+                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                    <span>Limit Exceeded: {loggedHours.toFixed(1)}h / {task.timeEstimate}h (+{(loggedHours - task.timeEstimate).toFixed(1)}h over)</span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
 
                           {/* Pipeline Badge on card when not expanded */}
@@ -2623,7 +2655,7 @@ export function TaskEngine({
                 </DialogHeader>
 
                 {/* Quick Info Grid */}
-                <div className="grid grid-cols-2 gap-4 bg-zinc-50/50 dark:bg-zinc-900/10 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-zinc-50/50 dark:bg-zinc-900/10 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
                   <div className="space-y-1">
                     <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Status</span>
                     <Select 
@@ -2664,6 +2696,25 @@ export function TaskEngine({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Allocated (Hours)</span>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        placeholder="E.g. 1"
+                        className="h-9 rounded-xl border border-zinc-200 bg-white dark:bg-zinc-950 font-semibold text-xs pl-8"
+                        value={task.timeEstimate || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeEstimate: val } : t));
+                        }}
+                      />
+                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                    </div>
                   </div>
 
                   <div className="col-span-2 space-y-1 pb-1">
@@ -2823,29 +2874,62 @@ export function TaskEngine({
                 </div>
 
                 {/* Timesheet Duration and Log Toggle inside Modal */}
-                <div className="space-y-2 border-t border-zinc-100 dark:border-zinc-800 pt-5 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-450 block">Time Spent Tracker</span>
-                    <span className="font-mono text-lg font-black text-zinc-900 dark:text-white block">
-                      {formatTime(elapsedTimes[task.id] || 0)}
-                    </span>
-                  </div>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-5 space-y-4">
+                  {(() => {
+                    const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
+                    const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
+                    return (
+                      <>
+                        {isExceeded && (
+                          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 flex gap-2.5 text-rose-800 dark:text-rose-300 select-none animate-[pulse_2s_infinite]">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                            <div>
+                              <p className="text-[10px] font-extrabold uppercase tracking-widest text-rose-600 dark:text-rose-400">Allotted Time Limit Exceeded</p>
+                              <p className="text-[10px] font-medium text-rose-550 dark:text-rose-450 mt-0.5 leading-relaxed">
+                                This task has exceeded its allocation of {task.timeEstimate} hour{task.timeEstimate !== 1 ? 's' : ''} by {(loggedHours - task.timeEstimate).toFixed(2)} hour{ (loggedHours - task.timeEstimate) !== 1 ? 's' : '' }.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-455 block">Time Spent Tracker</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-lg font-black text-zinc-900 dark:text-white block">
+                                {formatTime(elapsedTimes[task.id] || 0)}
+                              </span>
+                              {task.timeEstimate > 0 && (
+                                <span className={cn(
+                                  "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full font-mono border",
+                                  isExceeded 
+                                    ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent"
+                                )}>
+                                  Limit: {task.timeEstimate}h
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-                  <Button 
-                    variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
-                    size="sm"
-                    className={cn(
-                      "h-9 px-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer",
-                      activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
-                    )}
-                    onClick={(e) => toggleTimer(task.id, e)}
-                  >
-                    {activeTimerTaskId === task.id ? (
-                      <>Stop Live Tracker</>
-                    ) : (
-                      <>Start Live Tracker</>
-                    )}
-                  </Button>
+                          <Button 
+                            variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
+                            size="sm"
+                            className={cn(
+                              "h-9 px-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer",
+                              activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                            )}
+                            onClick={(e) => toggleTimer(task.id, e)}
+                          >
+                            {activeTimerTaskId === task.id ? (
+                              <>Stop Live Tracker</>
+                            ) : (
+                              <>Start Live Tracker</>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             );

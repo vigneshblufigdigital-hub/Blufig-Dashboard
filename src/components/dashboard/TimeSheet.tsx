@@ -15,6 +15,16 @@ import { cn } from '@/lib/utils';
 import { Task, Project, UserRole, UserProfile } from '@/src/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter,
+  DialogTrigger
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
 interface TimeSheetProps {
   tasks: Task[];
@@ -43,6 +53,20 @@ export function TimeSheet({
 
   // Track manual billing overrides for static logs that aren't backed by tasks
   const [staticBillingOverrides, setStaticBillingOverrides] = React.useState<Record<string, 'Billable' | 'Non-Billable'>>({});
+
+  const getFirstDayOfMonth = () => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+
+  const getTodayDate = () => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
+  const [startDate, setStartDate] = React.useState(getFirstDayOfMonth());
+  const [endDate, setEndDate] = React.useState(getTodayDate());
 
   // Auth privilege check for deciding billable status (Super Admins, Account Managers, Account Directors)
   const canModifyBilling = currentUser && (
@@ -120,10 +144,23 @@ export function TimeSheet({
   };
 
   // Monthly timesheet CSV downloader
-  const handleExportCSV = () => {
+  const handleExportCSV = (from?: string, to?: string) => {
+    const filterFrom = from || startDate;
+    const filterTo = to || endDate;
+
+    const filteredLogs = displayedLogs.filter(log => {
+      if (!log.date) return true;
+      return log.date >= filterFrom && log.date <= filterTo;
+    });
+
+    if (filteredLogs.length === 0) {
+      toast.error(`No timesheet logs found between ${filterFrom} and ${filterTo}.`);
+      return;
+    }
+
     const headers = ['Task / Activity', 'Project', 'Expert / User', 'Date', 'Duration (Formatted)', 'Duration (Seconds)', 'Billing Type'];
     
-    const rows = displayedLogs.map(log => [
+    const rows = filteredLogs.map(log => [
       `"${log.task.replace(/"/g, '""')}"`,
       `"${log.project.replace(/"/g, '""')}"`,
       `"${log.user.replace(/"/g, '""')}"`,
@@ -133,9 +170,9 @@ export function TimeSheet({
       log.billing
     ]);
     
-    const totalDurationSecs = displayedLogs.reduce((sum, log) => sum + (typeof log.durationSecs === 'number' ? log.durationSecs : 0), 0);
+    const totalDurationSecs = filteredLogs.reduce((sum, log) => sum + (typeof log.durationSecs === 'number' ? log.durationSecs : 0), 0);
     const totalRow = [
-      '"Total Timing Summary (All Logs)"',
+      '"Total Timing Summary (Filtered)"',
       '""',
       '""',
       '""',
@@ -154,12 +191,13 @@ export function TimeSheet({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `blufig_timesheet_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `blufig_timesheet_export_${filterFrom}_to_${filterTo}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    toast.success("CSV Timesheet exported successfully!");
+    toast.success(`Timesheet from ${filterFrom} to ${filterTo} exported successfully!`);
+    setIsExportDialogOpen(false);
   };
 
   return (
@@ -259,10 +297,57 @@ export function TimeSheet({
              <CardTitle className="text-xl font-bold tracking-tight">Recent Activity Log</CardTitle>
              <p className="text-xs text-zinc-400 font-medium mt-1">Cross-department time synchronization</p>
            </div>
-           <Button onClick={handleExportCSV} variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest gap-1.5 flex items-center">
-             <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" />
-             Export Timesheet
-           </Button>
+           <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+             <DialogTrigger
+               render={
+                 <Button variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest gap-1.5 flex items-center">
+                   <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" />
+                   Export Timesheet
+                 </Button>
+               }
+             />
+             <DialogContent className="sm:max-w-[400px]">
+               <DialogHeader>
+                 <DialogTitle className="text-lg font-bold tracking-tight">Export Timesheet Data</DialogTitle>
+                 <p className="text-xs text-zinc-400 mt-1">Select the date range for your CSV timesheet report.</p>
+               </DialogHeader>
+               <div className="grid gap-4 py-4">
+                 <div className="grid gap-2">
+                   <Label htmlFor="from-date" className="text-xs font-bold uppercase tracking-widest text-zinc-400">From Date</Label>
+                   <Input 
+                     id="from-date" 
+                     type="date" 
+                     value={startDate}
+                     onChange={(e) => setStartDate(e.target.value)}
+                   />
+                 </div>
+                 <div className="grid gap-2">
+                   <Label htmlFor="to-date" className="text-xs font-bold uppercase tracking-widest text-zinc-400">To Date</Label>
+                   <Input 
+                     id="to-date" 
+                     type="date" 
+                     value={endDate}
+                     onChange={(e) => setEndDate(e.target.value)}
+                   />
+                 </div>
+               </div>
+               <DialogFooter className="gap-2 sm:gap-0">
+                 <Button 
+                   variant="outline" 
+                   onClick={() => setIsExportDialogOpen(false)}
+                   className="h-10 text-xs font-bold uppercase tracking-widest"
+                 >
+                   Cancel
+                 </Button>
+                 <Button 
+                   onClick={() => handleExportCSV()}
+                   className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-lg font-bold uppercase tracking-widest text-xs"
+                 >
+                   Export CSV
+                 </Button>
+               </DialogFooter>
+             </DialogContent>
+           </Dialog>
         </CardHeader>
         <CardContent className="p-0">
           <div className="w-full overflow-x-auto">

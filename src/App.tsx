@@ -79,6 +79,7 @@ function Dashboard() {
   const [newProjectType, setNewProjectType] = useState('Retainer');
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
   const [newProjectClientId, setNewProjectClientId] = useState<string>('client-1'); // Default to Sarah Johnson
+  const [newProjectCoordinator, setNewProjectCoordinator] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
 
@@ -618,7 +619,8 @@ function Dashboard() {
       type: newProjectType as ProjectType,
       status: 'Active',
       startDate: new Date().toISOString().split('T')[0],
-      websiteUrl: resolvedWebsite
+      websiteUrl: resolvedWebsite,
+      clientCoordinator: newProjectCoordinator.trim() || undefined
     };
 
     const newTask: Task = {
@@ -643,6 +645,7 @@ function Dashboard() {
     setAiSuggestion(null);
     setNewProjectName('');
     setNewProjectWebsite('');
+    setNewProjectCoordinator('');
     
     // Redirect to the new project's board or tasks
     setSelectedProjectId(projectId);
@@ -651,6 +654,43 @@ function Dashboard() {
 
   const handleAddUser = (newUser: UserProfile) => {
     setUsers([...users, newUser]);
+    
+    if (newUser.role === UserRole.CLIENT) {
+      const projectId = 'p' + (projects.length + 1);
+      const projectName = `${newUser.name.trim()}'s Project`;
+      
+      const newProject: Project = {
+        id: projectId,
+        name: projectName,
+        clientId: newUser.id,
+        accountManagerId: '072', // Default to Amit Thakkar (Super Admin)
+        type: ProjectType.RETAINER,
+        status: 'Active',
+        startDate: new Date().toISOString().split('T')[0],
+        websiteUrl: `https://${newUser.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'client'}.com`,
+        clientCoordinator: newUser.name // Use the added client as their coordinator by default
+      };
+
+      const newTask: Task = {
+        id: 't' + (tasks.length + 1),
+        projectId: projectId,
+        deliverableId: 'd-initial',
+        name: `Onboarding & Kickoff Briefing for ${newUser.name}`,
+        type: 'Strategy',
+        assigneeId: '072',
+        status: TaskStatus.OPEN,
+        priority: Priority.HIGH,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        subTasks: []
+      };
+
+      setProjects(prev => [...prev, newProject]);
+      setTasks(prev => [...prev, newTask]);
+      
+      toast.success(`Automatically created a new Project: "${projectName}" for Client: ${newUser.name}!`);
+    }
   };
 
   const handleRemoveUser = (userId: string) => {
@@ -694,6 +734,7 @@ function Dashboard() {
           projects={projects}
           tasks={tasks}
           users={users}
+          invoices={invoices}
           pinnedProjectIds={pinnedProjectIds}
           onTogglePin={togglePinProject}
           onProjectClick={(projectId) => {
@@ -702,6 +743,8 @@ function Dashboard() {
           }} 
           onAddProjectClick={handleOpenCreateProject}
           onUpdateProjectAM={handleUpdateProjectAM}
+          onDeleteProject={handleDeleteProject}
+          onUpdateProjectStatus={handleUpdateProjectStatus}
           currentUser={user}
         />;
       case 'tasks':
@@ -742,7 +785,7 @@ function Dashboard() {
           />
         );
       case 'team':
-        return <TeamView users={users} setUsers={setUsers} />;
+        return <TeamView users={users} setUsers={setUsers} tasks={tasks} />;
       case 'profile':
         return (
           <UserProfileView 
@@ -764,8 +807,15 @@ function Dashboard() {
         return <ClientReports 
           reports={reports} 
           projects={projects} 
+          tasks={tasks}
+          elapsedTimes={elapsedTimes}
+          activeTimerTaskId={activeTimerTaskId}
           onAddReport={handleAddReport} 
           onRemoveReport={handleRemoveReport} 
+          onNavigateToTask={(taskId) => {
+            setHighlightedTaskId(taskId);
+            setActiveTab('tasks');
+          }}
         />;
       case 'billing':
         return <ClientInvoices 
@@ -797,6 +847,7 @@ function Dashboard() {
           onRemoveInvoice={handleRemoveInvoice}
           elapsedTimes={elapsedTimes}
           formatTime={formatTime}
+          activeTimerTaskId={activeTimerTaskId}
         />;
       default:
         return <Overview projects={projects} tasks={tasks} />;
@@ -1405,21 +1456,33 @@ function Dashboard() {
             </div>
 
             {user && ADMIN_ROLES.includes(user.role) && (
-              <div className="grid gap-2">
-                <Label htmlFor="client" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Client Partner</Label>
-                <Select value={newProjectClientId} onValueChange={setNewProjectClientId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select Client Partner" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.filter(u => u.role === UserRole.CLIENT).map(client => (
-                      <SelectItem key={client.id} value={client.id}>
-                        💼 {client.name} ({client.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="client" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Client Partner</Label>
+                  <Select value={newProjectClientId} onValueChange={setNewProjectClientId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Client Partner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.filter(u => u.role === UserRole.CLIENT).map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          💼 {client.name} ({client.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="coordinator" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Coordinator (Client Side)</Label>
+                  <Input 
+                    id="coordinator" 
+                    placeholder="e.g. John Doe (Coordinator)" 
+                    value={newProjectCoordinator}
+                    onChange={(e) => setNewProjectCoordinator(e.target.value)}
+                  />
+                </div>
+              </>
             )}
 
             <div className="grid gap-2">
@@ -1435,59 +1498,15 @@ function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
-
-            {aiSuggestion && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="p-4 rounded-xl bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900/30"
-              >
-                <div className="flex items-center space-x-2 text-brand-secondary mb-1">
-                  <Activity className="w-4 h-4" />
-                  <p className="text-[10px] font-bold uppercase tracking-widest">AI Assignment Engine</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                      Suggested Assignee: {users.find(u => u.id === aiSuggestion.assigneeId)?.name || 'Amit Kumar'}
-                    </p>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 italic leading-snug">"{aiSuggestion.reason}"</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="text-[10px] font-bold uppercase tracking-wider h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 shrink-0 ml-4 cursor-pointer"
-                    onClick={() => {
-                      if (aiSuggestion.assigneeId) {
-                        setSelectedAMId(aiSuggestion.assigneeId);
-                        toast.success(`Applied suggestion: ${users.find(u => u.id === aiSuggestion.assigneeId)?.name || 'Amit Kumar'}`);
-                      }
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </div>
-              </motion.div>
-            )}
           </div>
           <DialogFooter>
-            {!aiSuggestion ? (
-              <Button 
-                onClick={handleCreateProject} 
-                disabled={!newProjectName || isAssigning}
-                className="w-full bg-zinc-900 text-white h-12 rounded-xl font-bold uppercase tracking-widest text-xs"
-              >
-                {isAssigning ? "AI Engine Running..." : "Generate Project Plan"}
-              </Button>
-            ) : (
-              <Button 
-                onClick={handleConfirmProject}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-xl font-bold uppercase tracking-widest text-xs"
-              >
-                Confirm & Activate Project
-              </Button>
-            )}
+            <Button 
+              onClick={handleConfirmProject}
+              disabled={!newProjectName}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-xl font-bold uppercase tracking-widest text-xs"
+            >
+              Confirm & Activate Project
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

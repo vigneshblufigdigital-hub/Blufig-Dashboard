@@ -58,6 +58,7 @@ interface ClientPortalProps {
   onRemoveInvoice: (id: string) => void;
   elapsedTimes: Record<string, number>;
   formatTime: (seconds: number) => string;
+  activeTimerTaskId?: string | null;
 }
 
 export function ClientPortal({ 
@@ -71,7 +72,8 @@ export function ClientPortal({
   onAddInvoice, 
   onRemoveInvoice,
   elapsedTimes,
-  formatTime
+  formatTime,
+  activeTimerTaskId
 }: ClientPortalProps) {
   const { user } = useAuth();
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -857,8 +859,14 @@ export function ClientPortal({
           <ClientReports 
             reports={clientReports}
             projects={clientProjects}
+            tasks={tasks}
             onAddReport={onAddReport}
             onRemoveReport={onRemoveReport}
+            onNavigateToTask={(taskId) => {
+              setActiveTab('tasks');
+            }}
+            elapsedTimes={elapsedTimes}
+            activeTimerTaskId={activeTimerTaskId}
           />
         </TabsContent>
 

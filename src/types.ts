@@ -108,6 +108,7 @@ export interface Project {
   endDate?: string;
   description?: string;
   websiteUrl?: string;
+  clientCoordinator?: string;
 }
 
 export interface SubTask {

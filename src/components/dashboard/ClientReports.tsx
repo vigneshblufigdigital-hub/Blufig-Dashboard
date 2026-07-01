@@ -36,6 +36,7 @@ import { ClientReport, Project, UserRole, ADMIN_ROLES, Task, ProjectType, TaskSt
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
+import { jsPDF } from 'jspdf';
 
 interface ClientReportsProps {
   reports: ClientReport[];
@@ -175,6 +176,262 @@ export function ClientReports({
     } else {
       return diffDays >= 0 && diffDays < 30;
     }
+  };
+
+  const handleExportCSV = () => {
+    const allProjectsSummary = demoProjects.map(p => {
+      const pTasks = demoTasks.filter(t => t.projectId === p.id);
+      const pSecs = pTasks.reduce((sum, t) => {
+        if (isDateInTimeframe(t.updatedAt || t.createdAt, timeframe)) {
+          return sum + (t.timeLoggedSeconds || ((t.timeLogged || 0) * 3600));
+        }
+        return sum;
+      }, 0);
+      const pHours = pSecs / 3600;
+      
+      const pBudgetConfig = projectBudgets[p.id] || (
+        p.name.toLowerCase().includes('crm') || p.name.toLowerCase().includes('insight') 
+          ? { weekly: 2, monthly: 8 } 
+          : { weekly: 5, monthly: 15 }
+      );
+      const pBudgetHours = timeframe === 'weekly' ? pBudgetConfig.weekly : pBudgetConfig.monthly;
+      const isOver = pHours > pBudgetHours;
+      const usagePercent = pBudgetHours > 0 ? (pHours / pBudgetHours) * 100 : 0;
+
+      return {
+        name: p.name,
+        hoursSpent: pHours,
+        budgetHours: pBudgetHours,
+        status: isOver ? 'OVER-BUDGET' : 'SAFE',
+        utilization: usagePercent
+      };
+    });
+
+    const headers = ['Project Name', 'Timeframe', 'Hours Spent (hrs)', 'Budget Allocated (hrs)', 'Status', 'Utilization (%)'];
+    const rows = allProjectsSummary.map(item => [
+      `"${item.name.replace(/"/g, '""')}"`,
+      timeframe.toUpperCase(),
+      item.hoursSpent.toFixed(2),
+      item.budgetHours.toFixed(1),
+      item.status,
+      `${item.utilization.toFixed(0)}%`
+    ]);
+
+    const totalHours = allProjectsSummary.reduce((sum, item) => sum + item.hoursSpent, 0);
+    const totalBudget = allProjectsSummary.reduce((sum, item) => sum + item.budgetHours, 0);
+    const overBudgetCount = allProjectsSummary.filter(item => item.status === 'OVER-BUDGET').length;
+    const avgUtilization = totalBudget > 0 ? (totalHours / totalBudget) * 100 : 0;
+
+    rows.push([]);
+    rows.push([
+      'TOTALS / SUMMARY',
+      '',
+      totalHours.toFixed(2),
+      totalBudget.toFixed(1),
+      `${overBudgetCount} Over-Budget`,
+      `${avgUtilization.toFixed(0)}% Overall`
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Time_Allocation_${timeframe}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    const allProjectsSummary = demoProjects.map(p => {
+      const pTasks = demoTasks.filter(t => t.projectId === p.id);
+      const pSecs = pTasks.reduce((sum, t) => {
+        if (isDateInTimeframe(t.updatedAt || t.createdAt, timeframe)) {
+          return sum + (t.timeLoggedSeconds || ((t.timeLogged || 0) * 3600));
+        }
+        return sum;
+      }, 0);
+      const pHours = pSecs / 3600;
+      
+      const pBudgetConfig = projectBudgets[p.id] || (
+        p.name.toLowerCase().includes('crm') || p.name.toLowerCase().includes('insight') 
+          ? { weekly: 2, monthly: 8 } 
+          : { weekly: 5, monthly: 15 }
+      );
+      const pBudgetHours = timeframe === 'weekly' ? pBudgetConfig.weekly : pBudgetConfig.monthly;
+      const isOver = pHours > pBudgetHours;
+      const usagePercent = pBudgetHours > 0 ? (pHours / pBudgetHours) * 100 : 0;
+
+      return {
+        name: p.name,
+        hoursSpent: pHours,
+        budgetHours: pBudgetHours,
+        isOver,
+        usagePercent
+      };
+    });
+
+    const totalHours = allProjectsSummary.reduce((sum, item) => sum + item.hoursSpent, 0);
+    const totalBudget = allProjectsSummary.reduce((sum, item) => sum + item.budgetHours, 0);
+    const overBudgetCount = allProjectsSummary.filter(item => item.isOver).length;
+    const avgUtilization = totalBudget > 0 ? (totalHours / totalBudget) * 100 : 0;
+    const atRiskCount = allProjectsSummary.filter(item => !item.isOver && item.usagePercent >= 75 && item.usagePercent < 100).length;
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    doc.setFillColor(245, 158, 11);
+    doc.rect(0, 0, 210, 4, 'F');
+
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.setTextColor(24, 24, 27);
+    doc.text('BLUFIG', 20, 25);
+    
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(113, 113, 122);
+    doc.text('OPERATIONS SYSTEM', 20, 30);
+
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(24, 24, 27);
+    doc.text('TIME ALLOCATION BURN & VELOCITY REPORT', 20, 42);
+
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(82, 82, 91);
+    const todayStr = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    doc.text(`Timeframe Interval: ${timeframe.toUpperCase()}`, 20, 48);
+    doc.text(`Generated On: ${todayStr}`, 20, 53);
+    if (user?.email) {
+      doc.text(`Prepared By: ${user.email}`, 20, 58);
+    }
+
+    doc.setDrawColor(228, 228, 231);
+    doc.setLineWidth(0.5);
+    doc.line(20, 62, 190, 62);
+
+    doc.setFillColor(250, 250, 250);
+    doc.rect(20, 66, 170, 20, 'F');
+    doc.setDrawColor(244, 244, 245);
+    doc.rect(20, 66, 170, 20, 'S');
+
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(113, 113, 122);
+    doc.text('TOTAL LOGGED TIME', 25, 72);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(24, 24, 27);
+    doc.text(`${totalHours.toFixed(1)} hrs`, 25, 79);
+
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(113, 113, 122);
+    doc.text('OVER-BUDGET', 85, 72);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(overBudgetCount > 0 ? 225 : 24, overBudgetCount > 0 ? 29 : 24, overBudgetCount > 0 ? 72 : 27);
+    doc.text(`${overBudgetCount} Project${overBudgetCount !== 1 ? 's' : ''}`, 85, 79);
+
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(113, 113, 122);
+    doc.text('AT-RISK PROJECTS', 140, 72);
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(atRiskCount > 0 ? 217 : 24, atRiskCount > 0 ? 119 : 24, atRiskCount > 0 ? 6 : 27);
+    doc.text(`${atRiskCount} Project${atRiskCount !== 1 ? 's' : ''}`, 140, 79);
+
+    const tableTop = 93;
+    doc.setFillColor(244, 244, 245);
+    doc.rect(20, tableTop, 170, 8, 'F');
+    
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(63, 63, 70);
+    
+    doc.text('PROJECT NAME', 25, tableTop + 5.5);
+    doc.text('SPENT TIME', 105, tableTop + 5.5, { align: 'right' });
+    doc.text('BUDGET ALLOC', 135, tableTop + 5.5, { align: 'right' });
+    doc.text('UTILIZATION', 165, tableTop + 5.5, { align: 'right' });
+    doc.text('STATUS', 185, tableTop + 5.5, { align: 'right' });
+
+    let currentY = tableTop + 8;
+
+    allProjectsSummary.forEach((item, index) => {
+      if (index % 2 === 1) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(20, currentY, 170, 8, 'F');
+      }
+
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(24, 24, 27);
+      
+      const displayName = item.name.length > 40 ? item.name.substring(0, 37) + '...' : item.name;
+      doc.text(displayName, 25, currentY + 5.5);
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.text(`${item.hoursSpent.toFixed(2)} hrs`, 105, currentY + 5.5, { align: 'right' });
+      doc.setFont('Helvetica', 'normal');
+      doc.text(`${item.budgetHours.toFixed(1)} hrs`, 135, currentY + 5.5, { align: 'right' });
+      doc.text(`${item.usagePercent.toFixed(0)}%`, 165, currentY + 5.5, { align: 'right' });
+
+      if (item.isOver) {
+        doc.setTextColor(225, 29, 72);
+        doc.setFont('Helvetica', 'bold');
+        doc.text('Over-Budget', 185, currentY + 5.5, { align: 'right' });
+      } else if (item.usagePercent >= 75) {
+        doc.setTextColor(217, 119, 6);
+        doc.setFont('Helvetica', 'bold');
+        doc.text('At Risk', 185, currentY + 5.5, { align: 'right' });
+      } else {
+        doc.setTextColor(22, 163, 74);
+        doc.text('Safe', 185, currentY + 5.5, { align: 'right' });
+      }
+
+      currentY += 8;
+    });
+
+    doc.setDrawColor(228, 228, 231);
+    doc.setLineWidth(0.5);
+    doc.line(20, currentY, 190, currentY);
+
+    doc.setFillColor(253, 253, 253);
+    doc.rect(20, currentY, 170, 9, 'F');
+
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(24, 24, 27);
+    doc.text('AVERAGE / TOTAL', 25, currentY + 6);
+    doc.text(`${totalHours.toFixed(2)} hrs`, 105, currentY + 6, { align: 'right' });
+    doc.text(`${totalBudget.toFixed(1)} hrs`, 135, currentY + 6, { align: 'right' });
+    doc.text(`${avgUtilization.toFixed(0)}%`, 165, currentY + 6, { align: 'right' });
+    
+    if (overBudgetCount > 0) {
+      doc.setTextColor(225, 29, 72);
+      doc.text(`${overBudgetCount} Over`, 185, currentY + 6, { align: 'right' });
+    } else {
+      doc.setTextColor(22, 163, 74);
+      doc.text('All Safe', 185, currentY + 6, { align: 'right' });
+    }
+
+    doc.line(20, currentY + 9, 190, currentY + 9);
+
+    doc.setFont('Helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(161, 161, 170);
+    doc.text('BLUFIG Operations System • Time Burn & Velocity Report', 20, 280);
+    doc.text('Confidential Internal Report • Page 1 of 1', 190, 280, { align: 'right' });
+
+    doc.save(`Time_Allocation_${timeframe}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const isAdmin = user && ADMIN_ROLES.includes(user.role);
@@ -578,30 +835,54 @@ export function ClientReports({
                 </p>
               </div>
               
-              {/* Timeframe Toggle */}
-              <div className="flex rounded-xl bg-zinc-100 dark:bg-zinc-900 p-0.5 border border-zinc-200 dark:border-zinc-800 self-start sm:self-auto shadow-sm">
-                <button
-                  onClick={() => setTimeframe('weekly')}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] uppercase font-extrabold tracking-wider transition-all cursor-pointer",
-                    timeframe === 'weekly' 
-                      ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-sm" 
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                  )}
-                >
-                  Weekly Interval
-                </button>
-                <button
-                  onClick={() => setTimeframe('monthly')}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-[10px] uppercase font-extrabold tracking-wider transition-all cursor-pointer",
-                    timeframe === 'monthly' 
-                      ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-sm" 
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                  )}
-                >
-                  Monthly Interval
-                </button>
+              <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto shrink-0">
+                {/* Timeframe Toggle */}
+                <div className="flex rounded-xl bg-zinc-100 dark:bg-zinc-900 p-0.5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                  <button
+                    onClick={() => setTimeframe('weekly')}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-[10px] uppercase font-extrabold tracking-wider transition-all cursor-pointer",
+                      timeframe === 'weekly' 
+                        ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    Weekly Interval
+                  </button>
+                  <button
+                    onClick={() => setTimeframe('monthly')}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-[10px] uppercase font-extrabold tracking-wider transition-all cursor-pointer",
+                      timeframe === 'monthly' 
+                        ? "bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    Monthly Interval
+                  </button>
+                </div>
+
+                {/* Export Options */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleExportCSV}
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-[10px] font-extrabold uppercase tracking-widest border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-zinc-500" />
+                    CSV
+                  </Button>
+                  <Button
+                    onClick={handleExportPDF}
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-[10px] font-extrabold uppercase tracking-widest border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 px-3.5 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-zinc-500" />
+                    PDF
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -680,6 +961,25 @@ export function ClientReports({
               </span>
             </div>
             
+            {/* Project Selection Dropdown */}
+            <div className="mb-4">
+              <Select 
+                value={activeProjectId} 
+                onValueChange={(val) => setSelectedProjectId(val)}
+              >
+                <SelectTrigger className="w-full h-10 rounded-xl border-zinc-200 bg-white text-zinc-900 font-semibold text-xs focus:ring-1 focus:ring-zinc-900/10">
+                  <SelectValue placeholder="Choose a project..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-60 overflow-y-auto bg-white border border-zinc-200 shadow-md">
+                  {demoProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs font-semibold cursor-pointer">
+                      💼 {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Search filter for projects */}
             <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />

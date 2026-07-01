@@ -1,93 +1,73 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, TaskStatus, Priority } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { UserProfile } from "../types";
 
 export async function suggestAssignee(
   taskDescription: string,
   taskType: string,
   experts: UserProfile[]
 ) {
-  const prompt = `
-    You are an AI Resource Manager for an agency named Blufig.
-    Task Description: ${taskDescription}
-    Task Type: ${taskType}
-    
-    Available Experts:
-    ${JSON.stringify(experts.map(e => ({ 
-      id: e.id, 
-      name: e.name, 
-      dept: e.department, 
-      role: e.role, 
-      skills: e.skillTags 
-    })))}
-    
-    Rules for assignment:
-    1. Match Task Type to Department first.
-    2. Match Skill Tags.
-    3. Suggest the most qualified person.
-    
-    Return the result in JSON format containing the assigneeId and a short reason.
-  `;
-
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            assigneeId: { type: Type.STRING },
-            reason: { type: Type.STRING }
-          },
-          required: ["assigneeId", "reason"]
-        }
-      }
+    const response = await fetch("/api/tasks/suggest-assignee", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ taskDescription, taskType, experts }),
     });
 
-    return JSON.parse(response.text);
+    if (!response.ok) {
+      throw new Error("Failed to get assignee suggestion from server");
+    }
+
+    return await response.json();
   } catch (error) {
-    console.error("AI Assignment Error:", error);
-    // Fallback: return the first eligible person in that department
+    console.error("AI Assignment Client Error:", error);
     return { assigneeId: experts[0]?.id, reason: "Manual assignment fallback." };
   }
 }
 
 export async function suggestTaskDetails(taskTitle: string) {
-  const prompt = `
-    You are an AI Resource Planner at Blufig.
-    Analyze the following Task Title: "${taskTitle}"
-    
-    Predict and suggest:
-    1. Task Priority: One of "Low", "Normal", "High", "Critical".
-    2. Department Label (Task Type): One of "Web Development", "Design", "Adhoc", "Strategy", "Content".
-
-    Return the result in JSON format containing "priority" and "type".
-  `;
-
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            priority: { type: Type.STRING },
-            type: { type: Type.STRING }
-          },
-          required: ["priority", "type"]
-        }
-      }
+    const response = await fetch("/api/tasks/suggest-details", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ taskTitle }),
     });
 
-    return JSON.parse(response.text) as { priority: string; type: string };
+    if (!response.ok) {
+      throw new Error("Failed to get task details suggestion from server");
+    }
+
+    return await response.json();
   } catch (error) {
-    console.error("AI Task details Estimation Error:", error);
+    console.error("AI Task details Client Error:", error);
     return { priority: "Normal", type: "Adhoc" };
   }
 }
 
+export async function suggestTimeEstimate(
+  taskName: string,
+  taskDescription?: string,
+  taskType?: string,
+  projectName?: string
+) {
+  try {
+    const response = await fetch("/api/tasks/suggest-estimate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ taskName, taskDescription, taskType, projectName }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to get time estimate suggestion from server");
+    }
+
+    return await response.json() as { timeEstimate: number; justification: string };
+  } catch (error) {
+    console.error("AI Time Estimate Client Error:", error);
+    return { timeEstimate: 2.0, justification: "Default fallback estimate due to connection error." };
+  }
+}

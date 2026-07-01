@@ -9,7 +9,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Clock, Calendar, ArrowUpRight, BarChart3, MoreHorizontal, Play, Pause, Square, FileSpreadsheet } from 'lucide-react';
+import { Clock, Calendar, ArrowUpRight, BarChart3, MoreHorizontal, Play, Pause, Square, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Task, Project, UserRole, UserProfile } from '@/src/types';
@@ -25,6 +25,13 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface TimeSheetProps {
   tasks: Task[];
@@ -32,8 +39,10 @@ interface TimeSheetProps {
   projects: Project[];
   activeTimerTaskId: string | null;
   elapsedTimes: Record<string, number>;
+  setElapsedTimes?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   toggleTimer: (taskId: string, e?: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
+  users: UserProfile[];
 }
 
 export function TimeSheet({
@@ -42,14 +51,21 @@ export function TimeSheet({
   projects,
   activeTimerTaskId,
   elapsedTimes,
+  setElapsedTimes,
   toggleTimer,
   formatTime,
+  users,
 }: TimeSheetProps) {
   const { user: currentUser } = useAuth();
   
   // Find current running task
   const activeTask = tasks.find(t => t.id === activeTimerTaskId);
   const activeProject = activeTask ? projects.find(p => p.id === activeTask.projectId) : null;
+
+  // Track deleted log IDs (e.g., both static and real logs)
+  const [deletedLogIds, setDeletedLogIds] = React.useState<string[]>([]);
+  // Track project selection for analysis
+  const [selectedAnalyzeProjectId, setSelectedAnalyzeProjectId] = React.useState<string>('all');
 
   // Track manual billing overrides for static logs that aren't backed by tasks
   const [staticBillingOverrides, setStaticBillingOverrides] = React.useState<Record<string, 'Billable' | 'Non-Billable'>>({});
@@ -68,8 +84,14 @@ export function TimeSheet({
   const [startDate, setStartDate] = React.useState(getFirstDayOfMonth());
   const [endDate, setEndDate] = React.useState(getTodayDate());
 
-  // Auth privilege check for deciding billable status (Super Admins, Account Managers, Account Directors)
+  // Auth privilege check for deciding billing status (Super Admins, Account Managers, Account Directors)
   const canModifyBilling = currentUser && (
+    currentUser.role === UserRole.AGENCY_ADMIN || 
+    currentUser.role === UserRole.ACCOUNT_MANAGER || 
+    currentUser.role === UserRole.ACCOUNT_DIRECTOR
+  );
+
+  const isAdmin = currentUser && (
     currentUser.role === UserRole.AGENCY_ADMIN || 
     currentUser.role === UserRole.ACCOUNT_MANAGER || 
     currentUser.role === UserRole.ACCOUNT_DIRECTOR
@@ -86,6 +108,7 @@ export function TimeSheet({
         id: t.id,
         task: t.name,
         project: proj?.name || 'Global Project',
+        projectId: t.projectId,
         user: 'You',
         date: t.updatedAt ? t.updatedAt.split('T')[0] : '2026-06-16',
         durationSecs: (elapsedTimes && elapsedTimes[t.id]) || 0,
@@ -95,8 +118,10 @@ export function TimeSheet({
       };
     });
 
-  // Calculate dynamic metrics based on live updates
-  const totalRealSeconds = Object.values(elapsedTimes || {}).reduce((sum, current) => sum + current, 0);
+  // Calculate dynamic metrics based on live updates, excluding deleted logs
+  const totalRealSeconds = Object.entries(elapsedTimes || {})
+    .filter(([id]) => !deletedLogIds.includes(id))
+    .reduce((sum, [_, current]) => sum + current, 0);
   const totalBaseHours = 124.5;
   const liveTotalHours = (totalBaseHours + (totalRealSeconds / 3600)).toFixed(1);
 
@@ -107,16 +132,29 @@ export function TimeSheet({
     { id: 'static-3', task: 'Internal Strategy Sync', project: 'Strategy & Ops', user: 'Nishi Kant', date: '2026-06-12', durationSecs: 2880, billing: 'Non-Billable' as 'Billable' | 'Non-Billable', isRunning: false },
   ];
 
-  // Combine and apply overrides
+  // Combine and apply overrides, mapping static log projects to real project IDs where possible
   const displayedLogs = [
     ...realLogs,
-    ...staticLogs.filter(s => !realLogs.some(r => r.task === s.task))
-  ].map(log => {
+    ...staticLogs.filter(s => !realLogs.some(r => r.task === s.task)).map(s => {
+      const matchedProj = projects.find(p => p.name.toLowerCase().includes(s.project.toLowerCase()) || s.project.toLowerCase().includes(p.name.toLowerCase()));
+      return {
+        ...s,
+        projectId: matchedProj ? matchedProj.id : 'static-proj',
+        isReal: false
+      };
+    })
+  ].filter(log => !deletedLogIds.includes(log.id))
+   .map(log => {
     if (staticBillingOverrides[log.id]) {
       return { ...log, billing: staticBillingOverrides[log.id] };
     }
     return log;
   });
+
+  // Filter logs based on selected project for analysis
+  const filteredLogs = selectedAnalyzeProjectId === 'all'
+    ? displayedLogs
+    : displayedLogs.filter(log => log.projectId === selectedAnalyzeProjectId);
 
   // Handler to toggle billing
   const handleToggleBilling = (logId: string, currentBilling: 'Billable' | 'Non-Billable') => {
@@ -141,6 +179,36 @@ export function TimeSheet({
     }
 
     toast.success(`Billing status of "${displayedLogs.find(l => l.id === logId)?.task}" changed to ${nextBilling}!`);
+  };
+
+  // Handler to delete a log
+  const handleDeleteLog = (logId: string, taskName: string) => {
+    setDeletedLogIds(prev => [...prev, logId]);
+
+    const realTaskExists = tasks.some(t => t.id === logId);
+    if (realTaskExists) {
+      setTasks(prev => prev.map(t => {
+        if (t.id === logId) {
+          return {
+            ...t,
+            timeLogged: 0,
+            timeLoggedSeconds: 0,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return t;
+      }));
+
+      if (setElapsedTimes) {
+        setElapsedTimes(prev => {
+          const updated = { ...prev };
+          updated[logId] = 0;
+          return updated;
+        });
+      }
+    }
+
+    toast.success(`Deleted time tracking log for "${taskName}" successfully!`);
   };
 
   // Monthly timesheet CSV downloader
@@ -291,6 +359,156 @@ export function TimeSheet({
         <StatCard title="Productivity" value="94%" trend="+4%" icon={BarChart3} />
       </div>
 
+      {/* Project Time Analyzer Dropdown & Dashboard Card */}
+      <Card className="border-zinc-150 dark:border-zinc-850 shadow-sm bg-card overflow-hidden">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-900">
+          <div>
+            <CardTitle className="text-lg font-bold tracking-tight">Project Time Analyzer</CardTitle>
+            <p className="text-xs text-zinc-400 font-medium mt-1">Select a project to analyze time spent per task and total progress</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest shrink-0">Select Project:</span>
+            <Select 
+              value={selectedAnalyzeProjectId} 
+              onValueChange={setSelectedAnalyzeProjectId}
+            >
+              <SelectTrigger className="w-[240px] h-9 rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 font-semibold text-xs text-zinc-900 dark:text-zinc-100">
+                <SelectValue placeholder="All Projects" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 overflow-y-auto bg-white dark:bg-zinc-950">
+                <SelectItem value="all" className="text-xs font-medium">All Projects</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs font-medium">
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          {selectedAnalyzeProjectId === 'all' ? (
+            <div className="flex flex-col items-center justify-center py-6 text-center space-y-2">
+              <BarChart3 className="w-8 h-8 text-zinc-300 dark:text-zinc-700 animate-pulse" />
+              <p className="text-xs font-bold text-zinc-500">All Projects Selected</p>
+              <p className="text-[11px] text-zinc-400 max-w-md">
+                Select a specific project from the dropdown above to view task-by-task timing breakdowns and expert assignments.
+              </p>
+            </div>
+          ) : (
+            (() => {
+              const selectedProject = projects.find(p => p.id === selectedAnalyzeProjectId);
+              if (!selectedProject) return <p className="text-xs text-zinc-400">Project not found.</p>;
+              
+              const projectTasks = tasks.filter(t => t.projectId === selectedAnalyzeProjectId);
+              const totalProjectSeconds = projectTasks.reduce((sum, t) => {
+                const secs = elapsedTimes[t.id] !== undefined ? elapsedTimes[t.id] : ((t.timeLoggedSeconds || (t.timeLogged ? Math.round(t.timeLogged * 3600) : 0)));
+                return sum + secs;
+              }, 0);
+
+              return (
+                <div className="space-y-6">
+                  {/* Summary Stats for the selected project */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-1">Project Name</span>
+                      <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100 block truncate">{selectedProject.name}</span>
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">{selectedProject.status}</span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-1">Total Time Spent</span>
+                      <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight block">
+                        {formatTime(totalProjectSeconds)}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-semibold block mt-0.5">
+                        {projectTasks.length} total tasks
+                      </span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-850">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-1">Average / Task</span>
+                      <span className="text-base font-bold text-zinc-800 dark:text-zinc-100 font-mono tracking-tight block">
+                        {projectTasks.length > 0 ? formatTime(Math.round(totalProjectSeconds / projectTasks.length)) : '0:00:00'}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-semibold block mt-0.5">
+                        across logged activities
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tasks and Time Speded table */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-zinc-400">Tasks Breakdown & Spent Time</h4>
+                      {isAdmin && (
+                        <span className="text-[10px] font-bold text-brand-secondary bg-zinc-100 dark:bg-zinc-900 px-2.5 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-800">
+                          Admin View Enabled
+                        </span>
+                      )}
+                    </div>
+                    
+                    {projectTasks.length === 0 ? (
+                      <div className="text-center py-6 border border-dashed border-zinc-200 dark:border-zinc-850 rounded-xl">
+                        <p className="text-xs font-bold text-zinc-400">No tasks mapped to this project yet.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden border border-zinc-100 dark:border-zinc-850 rounded-xl">
+                        <Table>
+                          <TableHeader className="bg-zinc-50/50 dark:bg-zinc-950/30">
+                            <TableRow>
+                              <TableHead className="text-[9px] uppercase font-bold tracking-widest pl-4">Task Name</TableHead>
+                              <TableHead className="text-[9px] uppercase font-bold tracking-widest">Type</TableHead>
+                              <TableHead className="text-[9px] uppercase font-bold tracking-widest">Expert Assigned</TableHead>
+                              <TableHead className="text-[9px] uppercase font-bold tracking-widest text-right pr-4">Time Spent</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {projectTasks.map((task) => {
+                              const tSeconds = elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : ((task.timeLoggedSeconds || (task.timeLogged ? Math.round(task.timeLogged * 3600) : 0)));
+                              const assignedUser = users ? users.find(u => u.id === task.assigneeId) : null;
+                              
+                              return (
+                                <TableRow key={task.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-950/10">
+                                  <TableCell className="pl-4 font-semibold text-xs text-zinc-900 dark:text-zinc-100">
+                                    {task.name}
+                                  </TableCell>
+                                  <TableCell className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                                    {task.type}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-zinc-650 dark:text-zinc-350">
+                                    {assignedUser ? (
+                                      <div className="flex items-center space-x-1.5">
+                                        <span className="w-4 h-4 rounded-full bg-zinc-200 dark:bg-zinc-800 text-[9px] font-black uppercase text-zinc-600 dark:text-zinc-300 flex items-center justify-center shrink-0">
+                                          {assignedUser.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                        </span>
+                                        <span>{assignedUser.name}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-zinc-400 italic">Unassigned</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right pr-4 font-mono text-xs font-bold text-zinc-900 dark:text-zinc-50">
+                                    <Badge variant="secondary" className={cn(
+                                      "font-mono text-xs border-none px-2 h-5 tabular-nums",
+                                      tSeconds > 0 ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-450"
+                                    )}>
+                                      {formatTime(tSeconds)}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="border-zinc-100 dark:border-zinc-900 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
            <div>
@@ -363,7 +581,7 @@ export function TimeSheet({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayedLogs.map((log) => (
+                {filteredLogs.map((log) => (
                   <TableRow key={log.id} className={cn(
                     "group transition-colors",
                     log.isRunning ? "bg-orange-50/10 hover:bg-orange-50/20" : "hover:bg-zinc-50/80 dark:hover:bg-zinc-950/20"
@@ -436,9 +654,23 @@ export function TimeSheet({
                             )}
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                           <MoreHorizontal className="w-3 h-3 text-zinc-400" />
-                        </Button>
+                        
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 cursor-pointer">
+                              <MoreHorizontal className="w-3.5 h-3.5 text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteLog(log.id, log.task)}
+                              className="text-xs cursor-pointer text-red-600 dark:text-red-400 hover:text-red-750 focus:bg-red-50 dark:focus:bg-red-950/20"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-2" />
+                              <span>Delete Log</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>

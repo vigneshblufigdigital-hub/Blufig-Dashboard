@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -71,6 +71,186 @@ Guidelines:
     } catch (error: any) {
       console.error("Gemini processing error:", error);
       res.status(500).json({ error: error?.message || "Internal server error occurred while generating summary." });
+    }
+  });
+
+  // API Route for Task Assignee Suggestion
+  app.post("/api/tasks/suggest-assignee", async (req, res) => {
+    try {
+      const { taskDescription, taskType, experts = [] } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: "GEMINI_API_KEY environment variable is required on the server." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const prompt = `
+        You are an AI Resource Manager for an agency named Blufig.
+        Task Description: ${taskDescription}
+        Task Type: ${taskType}
+        
+        Available Experts:
+        ${JSON.stringify(experts.map((e: any) => ({ 
+          id: e.id, 
+          name: e.name, 
+          dept: e.department, 
+          role: e.role, 
+          skills: e.skillTags 
+        })))}
+        
+        Rules for assignment:
+        1. Match Task Type to Department first.
+        2. Match Skill Tags.
+        3. Suggest the most qualified person.
+        
+        Return the result in JSON format containing the assigneeId and a short reason.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              assigneeId: { type: Type.STRING },
+              reason: { type: Type.STRING }
+            },
+            required: ["assigneeId", "reason"]
+          }
+        }
+      });
+
+      res.json(JSON.parse(response.text || "{}"));
+    } catch (error: any) {
+      console.error("Gemini suggestAssignee error:", error);
+      res.status(500).json({ error: error?.message || "Internal server error" });
+    }
+  });
+
+  // API Route for Task Details Classification
+  app.post("/api/tasks/suggest-details", async (req, res) => {
+    try {
+      const { taskTitle } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: "GEMINI_API_KEY environment variable is required on the server." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const prompt = `
+        You are an AI Resource Planner at Blufig.
+        Analyze the following Task Title: "${taskTitle}"
+        
+        Predict and suggest:
+        1. Task Priority: One of "Low", "Normal", "High", "Critical".
+        2. Department Label (Task Type): One of "Web Development", "Design", "Adhoc", "Strategy", "Content".
+
+        Return the result in JSON format containing "priority" and "type".
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              priority: { type: Type.STRING },
+              type: { type: Type.STRING }
+            },
+            required: ["priority", "type"]
+          }
+        }
+      });
+
+      res.json(JSON.parse(response.text || "{}"));
+    } catch (error: any) {
+      console.error("Gemini suggestTaskDetails error:", error);
+      res.status(500).json({ error: error?.message || "Internal server error" });
+    }
+  });
+
+  // API Route for Smart Time Estimate Recommendation
+  app.post("/api/tasks/suggest-estimate", async (req, res) => {
+    try {
+      const { taskName, taskDescription, taskType, projectName } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: "GEMINI_API_KEY environment variable is required on the server." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const prompt = `
+        You are an expert agency operations planner at Blufig.
+        We are estimating the realistic time required for an agency task.
+        
+        Task Details:
+        - Name: "${taskName}"
+        - Description: "${taskDescription || ''}"
+        - Type/Department: "${taskType || ''}"
+        - Project Context: "${projectName || ''}"
+        
+        Based on typical agency workloads and standard development/design practices, suggest:
+        1. A realistic allocated time estimate in hours (as a number, e.g., 1.5, 3.0, 8.0, 12.0). 
+           Keep it within sensible bounds for standard tasks (usually between 0.5 and 40 hours).
+        2. A very brief, 1-2 sentence logical justification explaining how you arrived at this estimate.
+        
+        Return the result in JSON format containing "timeEstimate" (number) and "justification" (string).
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              timeEstimate: { type: Type.NUMBER },
+              justification: { type: Type.STRING }
+            },
+            required: ["timeEstimate", "justification"]
+          }
+        }
+      });
+
+      res.json(JSON.parse(response.text || "{}"));
+    } catch (error: any) {
+      console.error("Gemini suggest-estimate error:", error);
+      res.status(500).json({ error: error?.message || "Internal server error" });
     }
   });
 

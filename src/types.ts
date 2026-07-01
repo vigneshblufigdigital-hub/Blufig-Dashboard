@@ -57,6 +57,7 @@ export enum TaskStatus {
   OPEN = 'Open',
   IN_PROGRESS = 'In Progress',
   REVIEW = 'Review',
+  CLIENT_REVIEW = 'Client Review',
   REVISION_REQUESTED = 'Revision Requested',
   APPROVED = 'Approved',
   DONE = 'Done',
@@ -103,7 +104,7 @@ export interface Project {
   clientId: string;
   accountManagerId: string;
   type: ProjectType;
-  status: 'Active' | 'On Hold' | 'Completed';
+  status: 'Active' | 'On Hold' | 'Completed' | 'In Review' | 'Client Review' | 'Pending';
   startDate: string;
   endDate?: string;
   description?: string;

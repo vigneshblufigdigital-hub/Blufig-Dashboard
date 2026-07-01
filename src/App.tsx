@@ -39,6 +39,8 @@ import { ClientPortal } from './components/portal/ClientPortal';
 import { LoginPage } from './components/auth/LoginPage';
 import { UserProfileView } from './components/dashboard/UserProfileView';
 import { CalendarView } from './components/dashboard/CalendarView';
+import { getTemplates } from './utils/templateStorage';
+import { TemplateEditor } from './components/dashboard/TemplateEditor';
 import { 
   Dialog, 
   DialogContent, 
@@ -60,6 +62,7 @@ function Dashboard() {
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(user.role === UserRole.CLIENT ? 'portal' : 'overview');
+  const [adminSubTab, setAdminSubTab] = useState<'users' | 'templates'>('users');
 
   // Automatically reset active tab if user role changes
   React.useEffect(() => {
@@ -80,6 +83,7 @@ function Dashboard() {
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
   const [newProjectClientId, setNewProjectClientId] = useState<string>('client-1'); // Default to Sarah Johnson
   const [newProjectCoordinator, setNewProjectCoordinator] = useState('');
+  const [newProjectTemplate, setNewProjectTemplate] = useState('none');
   const [isAssigning, setIsAssigning] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
 
@@ -598,7 +602,7 @@ function Dashboard() {
     toast.success("Project and all associated tasks deleted.");
   };
 
-  const handleUpdateProjectStatus = (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending') => {
+  const handleUpdateProjectStatus = (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending' | 'In Review' | 'Client Review') => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status } : p));
     toast.success(`Project status updated to ${status}.`);
   };
@@ -623,29 +627,398 @@ function Dashboard() {
       clientCoordinator: newProjectCoordinator.trim() || undefined
     };
 
-    const newTask: Task = {
-      id: 't' + (tasks.length + 1),
-      projectId: projectId,
-      deliverableId: 'd-initial',
-      name: 'Initial Project Brief & Strategy',
-      type: 'Strategy',
-      assigneeId: selectedAMId,
-      status: TaskStatus.OPEN,
-      priority: Priority.HIGH,
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      subTasks: []
-    };
+    const generatedTasks: Task[] = [];
+    
+    if (newProjectTemplate !== 'none') {
+      const templates = getTemplates();
+      const selectedTmpl = templates.find(t => t.id === newProjectTemplate);
+      if (selectedTmpl) {
+        selectedTmpl.tasks.forEach((tk, idx) => {
+          const taskId = `t_${newProjectTemplate}_${idx}_` + Math.random().toString(36).substr(2, 9);
+          const subTasks = (tk.subTasks || []).map((name, sIdx) => ({
+            id: `st_${newProjectTemplate}_${idx}_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+            taskId,
+            name,
+            isCompleted: false,
+            createdAt: new Date().toISOString()
+          }));
+          
+          generatedTasks.push({
+            id: taskId,
+            projectId: projectId,
+            deliverableId: 'custom-' + Date.now() + '-' + idx,
+            name: tk.name,
+            type: tk.type,
+            assigneeId: selectedAMId,
+            status: TaskStatus.OPEN,
+            priority: tk.priority,
+            dueDate: new Date(Date.now() + (7 + idx * 3) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: tk.timeEstimate,
+            subTasks: subTasks
+          });
+        });
+      }
+    } else if (false && newProjectTemplate === 'web_dev') {
+      const taskId1 = 't_wd1_' + Math.random().toString(36).substr(2, 9);
+      const taskId2 = 't_wd2_' + Math.random().toString(36).substr(2, 9);
+      const taskId3 = 't_wd3_' + Math.random().toString(36).substr(2, 9);
+      generatedTasks.push(
+        {
+          id: taskId1,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-1',
+          name: 'Regular maintenance tasks',
+          type: 'Web Development',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 5.0,
+          subTasks: []
+        },
+        {
+          id: taskId2,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-2',
+          name: 'New development',
+          type: 'Web Development',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 10.0,
+          subTasks: []
+        },
+        {
+          id: taskId3,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-3',
+          name: 'Ad-hoc tasks',
+          type: 'Web Development',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.LOW,
+          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 2.67, // 2:40 is 2.67 hrs
+          subTasks: [
+            { id: 'st_wd3_1_' + Math.random().toString(36).substr(2, 9), taskId: taskId3, name: "Task request receipt & validation", isCompleted: false, createdAt: new Date().toISOString() },
+            { id: 'st_wd3_2_' + Math.random().toString(36).substr(2, 9), taskId: taskId3, name: "Implementation & smoke testing", isCompleted: false, createdAt: new Date().toISOString() }
+          ]
+        }
+      );
+    } else if (newProjectTemplate === 'ads_campaigns') {
+      const taskId1 = 't_ac1_' + Math.random().toString(36).substr(2, 9);
+      const taskId2 = 't_ac2_' + Math.random().toString(36).substr(2, 9);
+      const taskId3 = 't_ac3_' + Math.random().toString(36).substr(2, 9);
+      const taskId4 = 't_ac4_' + Math.random().toString(36).substr(2, 9);
+
+      const subTasks2 = [
+        "Client briefing & objective alignment",
+        "Competitor ad research & intelligence",
+        "Target audience definition & persona building",
+        "Keyword research & negative list preparation",
+        "Ad copy drafting (Headings & Descriptions)",
+        "Creative asset design request (banners/video)",
+        "Campaign budget & bidding strategy setup",
+        "UTM tracking & conversion pixel verification",
+        "Ad group staging & targeting configuration",
+        "Draft campaign review & sign-off",
+        "Campaign launch & initial bid adjustment"
+      ].map((name, idx) => ({
+        id: `st_ac2_${idx}_` + Math.random().toString(36).substr(2, 9),
+        taskId: taskId2,
+        name,
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+      }));
+
+      const subTasks3 = [
+        "Daily budget & spend pacing monitor",
+        "Negative keyword addition",
+        "Bid adjustment & optimization",
+        "Search terms report analysis",
+        "Ad copy A/B performance review",
+        "Quality score diagnostic review",
+        "Audience segment performance audit",
+        "Landing page speed & bounce check",
+        "Budget relocation between ad groups",
+        "Mid-month client pacing update"
+      ].map((name, idx) => ({
+        id: `st_ac3_${idx}_` + Math.random().toString(36).substr(2, 9),
+        taskId: taskId3,
+        name,
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+      }));
+
+      const subTasks4 = [
+        "Google Tag Manager container setup",
+        "GA4 property configuration & link",
+        "Google Ads account linking to GA4",
+        "Conversion action setup (Purchases/Leads)",
+        "Enhanced conversions activation",
+        "Google Merchant Center link (if shopping)",
+        "Remarketing tag installation on site",
+        "Custom segment creations (All Visitors, Cart Abandoners)",
+        "Ad strength standard checklist setup",
+        "Billing profile verification & setup",
+        "Negative placement list for display/PMax",
+        "Brand safety settings & content exclusion",
+        "Sitelink extensions creation (min 4)",
+        "Callout extensions setup (min 4)",
+        "Structured snippet setup",
+        "Promo or price extension setup if applicable",
+        "Automated rules configuration",
+        "Merchant Center feed diagnostics",
+        "Final health check & account validation"
+      ].map((name, idx) => ({
+        id: `st_ac4_${idx}_` + Math.random().toString(36).substr(2, 9),
+        taskId: taskId4,
+        name,
+        isCompleted: false,
+        createdAt: new Date().toISOString()
+      }));
+
+      generatedTasks.push(
+        {
+          id: taskId1,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-1',
+          name: 'Monthly Report - May 2026',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 4.0,
+          subTasks: []
+        },
+        {
+          id: taskId2,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-2',
+          name: 'New Campaigns- Ideation & Setup',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 12.0,
+          subTasks: subTasks2
+        },
+        {
+          id: taskId3,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-3',
+          name: 'Monthly activities',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 8.0,
+          subTasks: subTasks3
+        },
+        {
+          id: taskId4,
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-4',
+          name: 'Foundational Activities',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 15.0,
+          subTasks: subTasks4
+        }
+      );
+    } else if (newProjectTemplate === 'design') {
+      generatedTasks.push(
+        {
+          id: 't_ds1_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-1',
+          name: 'UI/UX Layout Design',
+          type: 'Design',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 8.0,
+          subTasks: []
+        },
+        {
+          id: 't_ds2_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-2',
+          name: 'Graphics & Asset Creation',
+          type: 'Design',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 4.0,
+          subTasks: []
+        },
+        {
+          id: 't_ds3_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-3',
+          name: 'Review & Feedback Loop',
+          type: 'Design',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.LOW,
+          dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 2.0,
+          subTasks: []
+        }
+      );
+    } else if (newProjectTemplate === 'content') {
+      generatedTasks.push(
+        {
+          id: 't_co1_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-1',
+          name: 'Content Writing & Drafting',
+          type: 'Content',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 6.0,
+          subTasks: []
+        },
+        {
+          id: 't_co2_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-2',
+          name: 'Editing & Proofreading',
+          type: 'Content',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 3.0,
+          subTasks: []
+        },
+        {
+          id: 't_co3_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-3',
+          name: 'SEO Content Optimization',
+          type: 'Content',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.LOW,
+          dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 2.0,
+          subTasks: []
+        }
+      );
+    } else if (newProjectTemplate === 'seo') {
+      generatedTasks.push(
+        {
+          id: 't_seo1_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-1',
+          name: 'On-Page SEO Audit',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 4.0,
+          subTasks: []
+        },
+        {
+          id: 't_seo2_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-2',
+          name: 'Keyword Research & Strategy',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.HIGH,
+          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 6.0,
+          subTasks: []
+        },
+        {
+          id: 't_seo3_' + Math.random().toString(36).substr(2, 9),
+          projectId: projectId,
+          deliverableId: 'custom-' + Date.now() + '-3',
+          name: 'Backlink & Competitor Analysis',
+          type: 'Strategy',
+          assigneeId: selectedAMId,
+          status: TaskStatus.OPEN,
+          priority: Priority.NORMAL,
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          timeEstimate: 5.0,
+          subTasks: []
+        }
+      );
+    } else {
+      generatedTasks.push({
+        id: 't' + (tasks.length + 1),
+        projectId: projectId,
+        deliverableId: 'd-initial',
+        name: 'Initial Project Brief & Strategy',
+        type: 'Strategy',
+        assigneeId: selectedAMId,
+        status: TaskStatus.OPEN,
+        priority: Priority.HIGH,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        subTasks: []
+      });
+    }
 
     setProjects([...projects, newProject]);
-    setTasks([...tasks, newTask]);
+    setTasks([...tasks, ...generatedTasks]);
     
     setIsCreateDialogOpen(false);
     setAiSuggestion(null);
     setNewProjectName('');
     setNewProjectWebsite('');
     setNewProjectCoordinator('');
+    setNewProjectTemplate('none');
     
     // Redirect to the new project's board or tasks
     setSelectedProjectId(projectId);
@@ -796,12 +1169,43 @@ function Dashboard() {
         );
       case 'admin':
         return isAdmin ? (
-          <UserManagement 
-            users={users} 
-            onAddUser={handleAddUser} 
-            onRemoveUser={handleRemoveUser} 
-            onUpdateUsers={setUsers}
-          />
+          <div className="space-y-6">
+            <div className="flex items-center space-x-1 bg-zinc-100 dark:bg-zinc-900/60 p-1 rounded-xl w-fit border border-zinc-200/50 dark:border-zinc-800">
+              <button
+                onClick={() => setAdminSubTab('users')}
+                className={cn(
+                  "px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 flex items-center gap-1.5",
+                  adminSubTab === 'users'
+                    ? "bg-white text-zinc-950 shadow dark:bg-zinc-800 dark:text-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                )}
+              >
+                👥 User Management
+              </button>
+              <button
+                onClick={() => setAdminSubTab('templates')}
+                className={cn(
+                  "px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 flex items-center gap-1.5",
+                  adminSubTab === 'templates'
+                    ? "bg-white text-zinc-950 shadow dark:bg-zinc-800 dark:text-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                )}
+              >
+                ⚙️ Task Templates Editor
+              </button>
+            </div>
+
+            {adminSubTab === 'users' ? (
+              <UserManagement 
+                users={users} 
+                onAddUser={handleAddUser} 
+                onRemoveUser={handleRemoveUser} 
+                onUpdateUsers={setUsers}
+              />
+            ) : (
+              <TemplateEditor />
+            )}
+          </div>
         ) : <Overview projects={projects} tasks={tasks} />;
       case 'reports':
         return <ClientReports 
@@ -831,8 +1235,10 @@ function Dashboard() {
           projects={projects}
           activeTimerTaskId={activeTimerTaskId}
           elapsedTimes={elapsedTimes}
+          setElapsedTimes={setElapsedTimes}
           toggleTimer={toggleTimer}
           formatTime={formatTime}
+          users={users}
         />;
       case 'portal':
         return <ClientPortal 
@@ -1497,6 +1903,118 @@ function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="grid gap-2 bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4.5 space-y-2 mt-1">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm">🏢</span>
+                <Label htmlFor="template" className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Team Template Preset (Odoo Style)</Label>
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                Choose a team template to automatically pre-populate standard operational workflows for this project.
+              </p>
+              <Select value={newProjectTemplate} onValueChange={setNewProjectTemplate}>
+                <SelectTrigger className="w-full border-zinc-200/60 bg-white/50 dark:bg-zinc-950/50">
+                  <SelectValue placeholder="No Preset (Start Empty)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">❌ Custom (Start Empty)</SelectItem>
+                  <SelectItem value="web_dev">💻 Web Dev Team Template</SelectItem>
+                  <SelectItem value="design">🎨 Design Team Template</SelectItem>
+                  <SelectItem value="content">✍️ Content Team Template</SelectItem>
+                  <SelectItem value="seo">🔍 SEO Team Template</SelectItem>
+                  <SelectItem value="ads_campaigns">📣 Ads Campaigns Template</SelectItem>
+                </SelectContent>
+              </Select>
+              {newProjectTemplate !== 'none' && (
+                <div className="border-t border-zinc-150 dark:border-zinc-800/80 pt-2.5 mt-1 space-y-1">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Predefined Task Cards:</span>
+                  {newProjectTemplate === 'web_dev' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Regular maintenance tasks</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">5:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• New development</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">10:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Ad-hoc tasks</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:40h</span>
+                      </div>
+                    </div>
+                  )}
+                  {newProjectTemplate === 'ads_campaigns' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Monthly Report - May 2026</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• New Campaigns- Ideation & Setup</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">12:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Monthly activities</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">8:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Foundational Activities</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">15:00h</span>
+                      </div>
+                    </div>
+                  )}
+                  {newProjectTemplate === 'design' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• UI/UX Layout Design</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">8:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Graphics & Asset Creation</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Review & Feedback Loop</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:00h</span>
+                      </div>
+                    </div>
+                  )}
+                  {newProjectTemplate === 'content' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Content Writing & Drafting</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">6:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Editing & Proofreading</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">3:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• SEO Content Optimization</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:00h</span>
+                      </div>
+                    </div>
+                  )}
+                  {newProjectTemplate === 'seo' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• On-Page SEO Audit</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Keyword Research & Strategy</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">6:00h</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                        <span>• Backlink & Competitor Analysis</span>
+                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">5:00h</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

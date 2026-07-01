@@ -15,7 +15,8 @@ import {
   Play,
   Trash2,
   UserPlus,
-  Download
+  Download,
+  Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -54,7 +55,7 @@ export function ProjectBoard({
   users?: UserProfile[];
   onUpdateProjectAM?: (projectId: string, amId: string) => void;
   onDeleteProject?: (projectId: string) => void;
-  onUpdateProjectStatus?: (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending') => void;
+  onUpdateProjectStatus?: (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending' | 'In Review' | 'Client Review') => void;
   currentUser?: UserProfile;
 }) {
   const isAdminUser = currentUser && ADMIN_ROLES.includes(currentUser.role);
@@ -207,8 +208,16 @@ export function ProjectBoard({
                     <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider">
                       {project.type}
                     </Badge>
-                    <Badge className="text-[10px] uppercase font-bold tracking-wider bg-zinc-100 text-zinc-900 border-none">
-                      {project.status}
+                    <Badge className={cn(
+                      "text-[10px] uppercase font-bold tracking-wider border-none",
+                      project.status === 'Active' && "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400",
+                      project.status === 'Completed' && "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
+                      project.status === 'On Hold' && "bg-amber-500/15 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
+                      project.status === 'In Review' && "bg-purple-500/15 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400",
+                      project.status === 'Client Review' && "bg-teal-500/15 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400",
+                      (project.status === 'Pending' || !project.status) && "bg-zinc-500/15 text-zinc-600 dark:bg-zinc-500/20 dark:text-zinc-400"
+                    )}>
+                      {project.status || 'Pending'}
                     </Badge>
                   </div>
                   <CardTitle className="text-xl font-bold tracking-tight mt-2 flex items-center">
@@ -305,6 +314,18 @@ export function ProjectBoard({
                               <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'Active')} className="text-xs cursor-pointer">
                                 <Play className="w-3.5 h-3.5 mr-2 text-emerald-550" />
                                 <span>Set Active</span>
+                              </DropdownMenuItem>
+                            )}
+                            {project.status !== 'In Review' && (
+                              <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'In Review')} className="text-xs cursor-pointer">
+                                <Eye className="w-3.5 h-3.5 mr-2 text-purple-500" />
+                                <span>Set In Review</span>
+                              </DropdownMenuItem>
+                            )}
+                            {project.status !== 'Client Review' && (
+                              <DropdownMenuItem onClick={() => onUpdateProjectStatus(project.id, 'Client Review')} className="text-xs cursor-pointer">
+                                <Users className="w-3.5 h-3.5 mr-2 text-teal-500" />
+                                <span>Set Client Review</span>
                               </DropdownMenuItem>
                             )}
                             {project.status !== 'Completed' && (

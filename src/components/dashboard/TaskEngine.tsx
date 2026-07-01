@@ -31,7 +31,10 @@ import {
   Sparkles,
   AlarmClock,
   BellRing,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  Users,
+  Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -52,14 +55,16 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { suggestAssignee, suggestTaskDetails } from '../../lib/gemini';
+import { suggestAssignee, suggestTaskDetails, suggestTimeEstimate } from '../../lib/gemini';
 import { toast } from 'sonner';
+import { getTemplates, TemplateTask } from '../../utils/templateStorage';
 
 import { emailService } from '@/src/services/emailService';
 
@@ -109,6 +114,18 @@ export function TaskEngine({
   setHighlightedTaskId
 }: TaskEngineProps) {
   const { user } = useAuth();
+  const [templateVersion, setTemplateVersion] = useState(0);
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setTemplateVersion(prev => prev + 1);
+    };
+    window.addEventListener('blufig_templates_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('blufig_templates_updated', handleUpdate);
+    };
+  }, []);
+
   const [filter, setFilter] = useState('active');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
@@ -204,6 +221,13 @@ export function TaskEngine({
       targetStatus: TaskStatus.REVIEW, 
       statuses: [TaskStatus.REVIEW, TaskStatus.REVISION_REQUESTED], 
       colorClass: 'text-amber-500 bg-amber-50/20 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/35' 
+    },
+    { 
+      id: 'client_review', 
+      title: 'Client Review', 
+      targetStatus: TaskStatus.CLIENT_REVIEW, 
+      statuses: [TaskStatus.CLIENT_REVIEW], 
+      colorClass: 'text-teal-500 bg-teal-50/20 dark:bg-teal-950/10 border-teal-100 dark:border-teal-900/35' 
     },
     { 
       id: 'blocked', 
@@ -313,12 +337,208 @@ export function TaskEngine({
     timeEstimate: 0
   });
 
+  // Manual Time Log State
+  const [isManualLogOpen, setIsManualLogOpen] = useState(false);
+  const [manualLogTask, setManualLogTask] = useState<Task | null>(null);
+  const [manualLogHours, setManualLogHours] = useState<string>("1.0");
+  const [manualLogNote, setManualLogNote] = useState<string>("");
+  const [isEstimatingTime, setIsEstimatingTime] = useState(false);
+
   const [enableWorkflow, setEnableWorkflow] = useState(false);
   const [workflowTemplate, setWorkflowTemplate] = useState<string>('none');
+  const [selectedTeamTemplate, setSelectedTeamTemplate] = useState<string>('none');
+  const [selectedTemplateTask, setSelectedTemplateTask] = useState<string>('');
   const [customWorkflowSteps, setCustomWorkflowSteps] = useState<Array<{ name: string; assigneeId: string }>>([
     { name: '🎨 Page Design Layout', assigneeId: '' },
     { name: '💻 Web Implementation & Code', assigneeId: '' }
   ]);
+
+  const getTeamTasks = (team: string) => {
+    switch (team) {
+      case 'web_dev':
+        return [
+          { name: 'Regular maintenance tasks', type: 'Web Development', timeEstimate: 5.0, priority: Priority.NORMAL },
+          { name: 'New development', type: 'Web Development', timeEstimate: 10.0, priority: Priority.HIGH },
+          { name: 'Ad-hoc tasks', type: 'Web Development', timeEstimate: 2.67, priority: Priority.LOW }
+        ];
+      case 'design':
+        return [
+          { name: 'UI/UX Layout Design', type: 'Design', timeEstimate: 8.0, priority: Priority.HIGH },
+          { name: 'Graphics & Asset Creation', type: 'Design', timeEstimate: 4.0, priority: Priority.NORMAL },
+          { name: 'Review & Feedback Loop', type: 'Design', timeEstimate: 2.0, priority: Priority.LOW }
+        ];
+      case 'content':
+        return [
+          { name: 'Content Writing & Drafting', type: 'Content', timeEstimate: 6.0, priority: Priority.NORMAL },
+          { name: 'Editing & Proofreading', type: 'Content', timeEstimate: 3.0, priority: Priority.NORMAL },
+          { name: 'SEO Content Optimization', type: 'Content', timeEstimate: 2.0, priority: Priority.LOW }
+        ];
+      case 'seo':
+        return [
+          { name: 'On-Page SEO Audit', type: 'Strategy', timeEstimate: 4.0, priority: Priority.HIGH },
+          { name: 'Keyword Research & Strategy', type: 'Strategy', timeEstimate: 6.0, priority: Priority.HIGH },
+          { name: 'Backlink & Competitor Analysis', type: 'Strategy', timeEstimate: 5.0, priority: Priority.NORMAL }
+        ];
+      case 'ads_campaigns':
+        return [
+          { name: 'Monthly Report - May 2026', type: 'Strategy', timeEstimate: 4.0, priority: Priority.HIGH },
+          { name: 'New Campaigns- Ideation & Setup', type: 'Strategy', timeEstimate: 12.0, priority: Priority.HIGH },
+          { name: 'Monthly activities', type: 'Strategy', timeEstimate: 8.0, priority: Priority.NORMAL },
+          { name: 'Foundational Activities', type: 'Strategy', timeEstimate: 15.0, priority: Priority.HIGH }
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const handleTemplateTaskChange = (taskName: string) => {
+    setSelectedTemplateTask(taskName);
+    const tasksForTeam = getTeamTasks(selectedTeamTemplate);
+    const found = tasksForTeam.find(t => t.name === taskName);
+    if (found) {
+      setNewTask(prev => ({
+        ...prev,
+        name: found.name,
+        type: found.type,
+        timeEstimate: found.timeEstimate,
+        priority: found.priority
+      }));
+    }
+  };
+
+  const handleTeamTemplateChange = (teamVal: string) => {
+    setSelectedTeamTemplate(teamVal);
+    if (teamVal === 'none') {
+      setSelectedTemplateTask('');
+    } else {
+      const tasksForTeam = getTeamTasks(teamVal);
+      if (tasksForTeam.length > 0) {
+        setSelectedTemplateTask(tasksForTeam[0].name);
+        setNewTask(prev => ({
+          ...prev,
+          name: tasksForTeam[0].name,
+          type: tasksForTeam[0].type,
+          timeEstimate: tasksForTeam[0].timeEstimate,
+          priority: tasksForTeam[0].priority
+        }));
+      }
+    }
+  };
+
+  const handleGenerateAllTeamTasks = () => {
+    if (!newTask.projectId) {
+      toast.error("Please select a project first");
+      return;
+    }
+    const tasksForTeam = getTeamTasks(selectedTeamTemplate);
+    const newTasksToInject = tasksForTeam.map((tk, idx) => {
+      const taskId = 't_tpl_' + Math.random().toString(36).substr(2, 9);
+      
+      let subTasks: any[] = [];
+      if (tk.name === 'Ad-hoc tasks') {
+        subTasks = [
+          { id: 'st_ah1_' + Math.random().toString(36).substr(2, 9), taskId, name: "Task request receipt & validation", isCompleted: false, createdAt: new Date().toISOString() },
+          { id: 'st_ah2_' + Math.random().toString(36).substr(2, 9), taskId, name: "Implementation & smoke testing", isCompleted: false, createdAt: new Date().toISOString() }
+        ];
+      } else if (tk.name === 'New Campaigns- Ideation & Setup') {
+        subTasks = [
+          "Client briefing & objective alignment",
+          "Competitor ad research & intelligence",
+          "Target audience definition & persona building",
+          "Keyword research & negative list preparation",
+          "Ad copy drafting (Headings & Descriptions)",
+          "Creative asset design request (banners/video)",
+          "Campaign budget & bidding strategy setup",
+          "UTM tracking & conversion pixel verification",
+          "Ad group staging & targeting configuration",
+          "Draft campaign review & sign-off",
+          "Campaign launch & initial bid adjustment"
+        ].map((name, sIdx) => ({
+          id: `st_ac2_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+          taskId,
+          name,
+          isCompleted: false,
+          createdAt: new Date().toISOString()
+        }));
+      } else if (tk.name === 'Monthly activities') {
+        subTasks = [
+          "Daily budget & spend pacing monitor",
+          "Negative keyword addition",
+          "Bid adjustment & optimization",
+          "Search terms report analysis",
+          "Ad copy A/B performance review",
+          "Quality score diagnostic review",
+          "Audience segment performance audit",
+          "Landing page speed & bounce check",
+          "Budget relocation between ad groups",
+          "Mid-month client pacing update"
+        ].map((name, sIdx) => ({
+          id: `st_ac3_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+          taskId,
+          name,
+          isCompleted: false,
+          createdAt: new Date().toISOString()
+        }));
+      } else if (tk.name === 'Foundational Activities') {
+        subTasks = [
+          "Google Tag Manager container setup",
+          "GA4 property configuration & link",
+          "Google Ads account linking to GA4",
+          "Conversion action setup (Purchases/Leads)",
+          "Enhanced conversions activation",
+          "Google Merchant Center link (if shopping)",
+          "Remarketing tag installation on site",
+          "Custom segment creations (All Visitors, Cart Abandoners)",
+          "Ad strength standard checklist setup",
+          "Billing profile verification & setup",
+          "Negative placement list for display/PMax",
+          "Brand safety settings & content exclusion",
+          "Sitelink extensions creation (min 4)",
+          "Callout extensions setup (min 4)",
+          "Structured snippet setup",
+          "Promo or price extension setup if applicable",
+          "Automated rules configuration",
+          "Merchant Center feed diagnostics",
+          "Final health check & account validation"
+        ].map((name, sIdx) => ({
+          id: `st_ac4_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+          taskId,
+          name,
+          isCompleted: false,
+          createdAt: new Date().toISOString()
+        }));
+      }
+
+      return {
+        id: taskId,
+        projectId: newTask.projectId,
+        deliverableId: 'custom-' + Date.now() + '-' + idx,
+        name: tk.name,
+        type: tk.type,
+        assigneeId: newTask.assigneeId || user?.id || '',
+        status: TaskStatus.OPEN,
+        priority: tk.priority,
+        dueDate: newTask.dueDate || new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        timeEstimate: tk.timeEstimate,
+        subTasks: subTasks
+      } as Task;
+    });
+
+    setTasks(prev => [...newTasksToInject, ...prev]);
+    const teamName = selectedTeamTemplate === 'web_dev' ? 'Web Dev' : 
+                     selectedTeamTemplate === 'design' ? 'Design' : 
+                     selectedTeamTemplate === 'content' ? 'Content' : 
+                     selectedTeamTemplate === 'seo' ? 'SEO' : 
+                     selectedTeamTemplate === 'ads_campaigns' ? 'Ads Campaigns' : 'Selected';
+    toast.success(`Generated all ${newTasksToInject.length} tasks for ${teamName} Team!`);
+    setIsCreateDialogOpen(false);
+    
+    // Reset selected templates
+    setSelectedTeamTemplate('none');
+    setSelectedTemplateTask('');
+  };
 
   const handleTemplateChange = (template: string) => {
     setWorkflowTemplate(template);
@@ -372,7 +592,314 @@ export function TaskEngine({
     setCustomWorkflowSteps(prev => prev.map((s, idx) => idx === index ? { ...s, assigneeId } : s));
   };
 
+  const handleSaveManualLog = () => {
+    if (!manualLogTask) return;
+    const changeHours = parseFloat(manualLogHours) || 0;
+    if (changeHours === 0) {
+      toast.error("Please enter a valid amount of hours");
+      return;
+    }
+
+    const changeSeconds = Math.round(changeHours * 3600);
+
+    // Get current logged seconds
+    const currentSeconds = elapsedTimes[manualLogTask.id] !== undefined
+      ? elapsedTimes[manualLogTask.id]
+      : (manualLogTask.timeLoggedSeconds || ((manualLogTask.timeLogged || 0) * 3600));
+
+    let nextSeconds = currentSeconds + changeSeconds;
+    if (nextSeconds < 0) {
+      nextSeconds = 0;
+    }
+
+    const nextHours = parseFloat((nextSeconds / 3600).toFixed(4));
+
+    // Update elapsedTimes
+    setElapsedTimes(prev => ({
+      ...prev,
+      [manualLogTask.id]: nextSeconds
+    }));
+
+    // Update tasks state
+    setTasks(prev => prev.map(t => {
+      if (t.id === manualLogTask.id) {
+        return {
+          ...t,
+          timeLoggedSeconds: nextSeconds,
+          timeLogged: nextHours,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
+
+    toast.success(`Successfully logged manual time for "${manualLogTask.name}"!`, {
+      description: `Logged: ${changeHours > 0 ? '+' : ''}${changeHours.toFixed(2)}h. New total: ${nextHours.toFixed(2)}h.`
+    });
+
+    setIsManualLogOpen(false);
+    setManualLogTask(null);
+    setManualLogHours("1.0");
+    setManualLogNote("");
+  };
+
+  const handleAiSuggestEstimateForTask = async (task: Task) => {
+    setIsEstimatingTime(true);
+    try {
+      const project = projects.find(p => p.id === task.projectId);
+      const res = await suggestTimeEstimate(
+        task.name, 
+        task.description, 
+        task.type, 
+        project?.name
+      );
+      if (res) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeEstimate: res.timeEstimate } : t));
+        if (selectedDetailTask && selectedDetailTask.id === task.id) {
+          setSelectedDetailTask(prev => prev ? { ...prev, timeEstimate: res.timeEstimate } : null);
+        }
+        toast.success(`AI Recommended Estimate: ${res.timeEstimate} hrs`, {
+          description: res.justification,
+          duration: 6000
+        });
+      }
+    } catch (e) {
+      toast.error("Could not generate AI estimate recommendation");
+    } finally {
+      setIsEstimatingTime(false);
+    }
+  };
+
   const handleCreateTask = () => {
+    if (selectedTeamTemplate !== 'none') {
+      if (!newTask.projectId) {
+        toast.error("Please select a project");
+        return;
+      }
+      
+      const pId = newTask.projectId;
+      const amId = newTask.assigneeId || user?.id || '';
+      const baseDueDate = newTask.dueDate || new Date().toISOString().split('T')[0];
+      
+      const teamTasksToAdd: Task[] = [];
+      
+      if (selectedTeamTemplate === 'web_dev') {
+        teamTasksToAdd.push(
+          {
+            id: 't_wd1_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-1',
+            name: 'Regular maintenance tasks',
+            type: 'Web Development',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.NORMAL,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 5.0,
+            subTasks: []
+          },
+          {
+            id: 't_wd2_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-2',
+            name: 'New development',
+            type: 'Web Development',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.HIGH,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 10.0,
+            subTasks: []
+          },
+          {
+            id: 't_wd3_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-3',
+            name: 'Ad-hoc tasks',
+            type: 'Web Development',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.LOW,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 2.67, // 2:40 is 2.67 hrs
+            subTasks: []
+          }
+        );
+      } else if (selectedTeamTemplate === 'design') {
+        teamTasksToAdd.push(
+          {
+            id: 't_ds1_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-1',
+            name: 'UI/UX Layout Design',
+            type: 'Design',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.HIGH,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 8.0,
+            subTasks: []
+          },
+          {
+            id: 't_ds2_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-2',
+            name: 'Graphics & Asset Creation',
+            type: 'Design',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.NORMAL,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 4.0,
+            subTasks: []
+          },
+          {
+            id: 't_ds3_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-3',
+            name: 'Review & Feedback Loop',
+            type: 'Design',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.LOW,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 2.0,
+            subTasks: []
+          }
+        );
+      } else if (selectedTeamTemplate === 'content') {
+        teamTasksToAdd.push(
+          {
+            id: 't_co1_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-1',
+            name: 'Content Writing & Drafting',
+            type: 'Content',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.NORMAL,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 6.0,
+            subTasks: []
+          },
+          {
+            id: 't_co2_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-2',
+            name: 'Editing & Proofreading',
+            type: 'Content',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.NORMAL,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 3.0,
+            subTasks: []
+          },
+          {
+            id: 't_co3_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-3',
+            name: 'SEO Content Optimization',
+            type: 'Content',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.LOW,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 2.0,
+            subTasks: []
+          }
+        );
+      } else if (selectedTeamTemplate === 'seo') {
+        teamTasksToAdd.push(
+          {
+            id: 't_seo1_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-1',
+            name: 'On-Page SEO Audit',
+            type: 'Strategy',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.HIGH,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 4.0,
+            subTasks: []
+          },
+          {
+            id: 't_seo2_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-2',
+            name: 'Keyword Research & Strategy',
+            type: 'Strategy',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.HIGH,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 6.0,
+            subTasks: []
+          },
+          {
+            id: 't_seo3_' + Math.random().toString(36).substr(2, 9),
+            projectId: pId,
+            deliverableId: 'custom-' + Date.now() + '-3',
+            name: 'Backlink & Competitor Analysis',
+            type: 'Strategy',
+            assigneeId: amId,
+            status: TaskStatus.OPEN,
+            priority: Priority.NORMAL,
+            dueDate: baseDueDate,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            timeEstimate: 5.0,
+            subTasks: []
+          }
+        );
+      }
+      
+      setTasks([...teamTasksToAdd, ...tasks]);
+      toast.success(`Successfully populated standard workflow cards for the team preset!`);
+      
+      setIsCreateDialogOpen(false);
+      setSelectedTeamTemplate('none');
+      setNewTask({
+        name: '',
+        projectId: filterProjectId || '',
+        type: 'Web Development',
+        status: TaskStatus.OPEN,
+        priority: Priority.NORMAL,
+        dueDate: new Date().toISOString().split('T')[0],
+        assigneeId: user?.id || '',
+        description: '',
+        timeEstimate: 0,
+        isRecurring: false,
+        recurrenceInterval: 1,
+        recurrenceTimes: 1,
+        recurrencePeriod: 'week'
+      });
+      return;
+    }
+
     if (!newTask.name || !newTask.projectId) {
       toast.error("Please enter a task name and select a project");
       return;
@@ -621,7 +1148,7 @@ export function TaskEngine({
       case 'active':
         return [TaskStatus.IN_PROGRESS, TaskStatus.OPEN].includes(t.status as TaskStatus);
       case 'review':
-        return [TaskStatus.REVIEW, TaskStatus.REVISION_REQUESTED].includes(t.status as TaskStatus);
+        return [TaskStatus.REVIEW, TaskStatus.REVISION_REQUESTED, TaskStatus.CLIENT_REVIEW].includes(t.status as TaskStatus);
       case 'backlog':
         return [TaskStatus.BLOCKED].includes(t.status as TaskStatus);
       case 'archived':
@@ -1202,6 +1729,68 @@ export function TaskEngine({
             </DialogContent>
           </Dialog>
 
+          {/* Manual Log Time Dialog */}
+          <Dialog open={isManualLogOpen} onOpenChange={setIsManualLogOpen}>
+            <DialogContent className="sm:max-w-[400px] rounded-2xl p-6 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                  Log Manual Time
+                </DialogTitle>
+                <div className="text-xs text-zinc-400 font-medium mt-1">
+                  {manualLogTask ? `Logging time for: ${manualLogTask.name}` : 'Log time for task'}
+                </div>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="log-hours" className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                    Hours worked
+                  </Label>
+                  <Input
+                    id="log-hours"
+                    type="number"
+                    step="0.25"
+                    min="0.1"
+                    value={manualLogHours}
+                    onChange={(e) => setManualLogHours(e.target.value)}
+                    placeholder="e.g., 1.5, 2.0"
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  />
+                  <span className="text-[10px] text-zinc-450">
+                    Use decimals to log fractional hours (e.g., 0.5 for 30 minutes).
+                  </span>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="log-notes" className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                    Activity description / Notes
+                  </Label>
+                  <Input
+                    id="log-notes"
+                    type="text"
+                    value={manualLogNote}
+                    onChange={(e) => setManualLogNote(e.target.value)}
+                    placeholder="Brief description of what you completed"
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-900">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => setIsManualLogOpen(false)}
+                  className="rounded-xl h-10 px-4 font-bold text-[10px] uppercase tracking-widest cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSaveManualLog}
+                  className="bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 rounded-xl h-10 px-4 font-bold text-[10px] uppercase tracking-widest cursor-pointer"
+                >
+                  Log Time
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger 
               render={
@@ -1216,6 +1805,71 @@ export function TaskEngine({
               <DialogTitle className="text-xl font-bold tracking-tight">Create New Task</DialogTitle>
             </DialogHeader>
             <div className="grid gap-6 py-4">
+              {/* Odoo-style Team Template Preset */}
+              <div className="grid gap-3 bg-orange-500/[0.03] border border-orange-500/10 rounded-2xl p-4 space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm">⚡</span>
+                  <Label className="text-xs font-black uppercase tracking-wider text-orange-600 dark:text-orange-400">Team Template Preset (Odoo Style)</Label>
+                </div>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                  Choose a team to automatically load standard tasks and allocated times.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Department Team</Label>
+                    <Select value={selectedTeamTemplate} onValueChange={handleTeamTemplateChange}>
+                      <SelectTrigger className="h-9 text-xs rounded-xl border-zinc-200">
+                        <SelectValue placeholder="Select Team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Custom Task (No Preset)</SelectItem>
+                        <SelectItem value="web_dev">💻 Web Dev Team</SelectItem>
+                        <SelectItem value="design">🎨 Design Team</SelectItem>
+                        <SelectItem value="content">✍️ Content Team</SelectItem>
+                        <SelectItem value="seo">🔍 SEO Team</SelectItem>
+                        <SelectItem value="ads_campaigns">📣 Ads Campaigns Team</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedTeamTemplate !== 'none' && (
+                    <div className="space-y-1.5 animate-fade-in">
+                      <Label className="text-[9px] font-bold uppercase tracking-widest text-orange-500 font-black">Preset Template Task</Label>
+                      <Select value={selectedTemplateTask} onValueChange={handleTemplateTaskChange}>
+                        <SelectTrigger className="h-9 text-xs rounded-xl border-orange-200/60 bg-orange-50/10 text-orange-700 dark:text-orange-400">
+                          <SelectValue placeholder="Select Task Preset" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getTeamTasks(selectedTeamTemplate).map(tk => (
+                            <SelectItem key={tk.name} value={tk.name}>
+                              {tk.name} ({tk.timeEstimate}h)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {selectedTeamTemplate !== 'none' && (
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                    <span className="text-[9px] text-zinc-500 font-medium">
+                      Want all tasks for this team?
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      className="h-7 text-[9px] font-extrabold uppercase tracking-widest border-orange-200 text-orange-600 hover:bg-orange-50/50 hover:text-orange-700 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer"
+                      onClick={handleGenerateAllTeamTasks}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Generate all {getTeamTasks(selectedTeamTemplate).length} Tasks
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Task Name</Label>
@@ -1377,7 +2031,46 @@ export function TaskEngine({
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Allocated Time (Hours)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Allocated Time (Hours)</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      type="button"
+                      className="h-5 text-[9px] font-extrabold uppercase tracking-widest text-brand-secondary hover:text-orange-600 hover:bg-orange-50/50 px-1.5"
+                      onClick={async () => {
+                        if (!newTask.name) {
+                          toast.error("Please enter a task name first");
+                          return;
+                        }
+                        setIsEstimatingTime(true);
+                        try {
+                          const project = projects.find(p => p.id === newTask.projectId);
+                          const res = await suggestTimeEstimate(
+                            newTask.name, 
+                            newTask.description, 
+                            newTask.type, 
+                            project?.name
+                          );
+                          if (res) {
+                            setNewTask(prev => ({ ...prev, timeEstimate: res.timeEstimate }));
+                            toast.success(`AI Recommended Estimate: ${res.timeEstimate} hrs`, {
+                              description: res.justification,
+                              duration: 6000
+                            });
+                          }
+                        } catch (e) {
+                          toast.error("Could not generate AI estimate recommendation");
+                        } finally {
+                          setIsEstimatingTime(false);
+                        }
+                      }}
+                      disabled={isEstimatingTime}
+                    >
+                      <Sparkles className={cn("w-3 h-3 mr-1", isEstimatingTime && "animate-spin")} />
+                      {isEstimatingTime ? "Estimating..." : "🔮 AI Suggest"}
+                    </Button>
+                  </div>
                   <div className="relative">
                     <Input 
                       type="number" 
@@ -1710,8 +2403,12 @@ export function TaskEngine({
                           task.status === TaskStatus.OPEN && "bg-zinc-50 text-zinc-600 border-zinc-200",
                           task.status === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-600 border-blue-100",
                           task.status === TaskStatus.REVIEW && "bg-amber-50 text-amber-600 border-amber-100",
+                          task.status === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-600 border-teal-100",
+                          task.status === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-600 border-purple-100",
+                          task.status === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-600 border-indigo-100",
                           task.status === TaskStatus.DONE && "bg-emerald-50 text-emerald-600 border-emerald-100",
-                          task.status === TaskStatus.BLOCKED && "bg-red-50 text-red-600 border-red-100"
+                          task.status === TaskStatus.BLOCKED && "bg-rose-50 text-rose-600 border-rose-100",
+                          task.status === TaskStatus.CANCELLED && "bg-red-50 text-red-600 border-red-105"
                         )}>
                           <SelectValue placeholder="Status" />
                         </SelectTrigger>
@@ -1719,8 +2416,12 @@ export function TaskEngine({
                           <SelectItem value={TaskStatus.OPEN} className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50">Open</SelectItem>
                           <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[10px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50">In Progress</SelectItem>
                           <SelectItem value={TaskStatus.REVIEW} className="text-[10px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50">Review</SelectItem>
+                          <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[10px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50">Client Review</SelectItem>
+                          <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[10px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50">Revision Requested</SelectItem>
+                          <SelectItem value={TaskStatus.APPROVED} className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50">Approved</SelectItem>
                           <SelectItem value={TaskStatus.DONE} className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50">Done</SelectItem>
-                          <SelectItem value={TaskStatus.BLOCKED} className="text-[10px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50">Blocked</SelectItem>
+                          <SelectItem value={TaskStatus.BLOCKED} className="text-[10px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50">Blocked</SelectItem>
+                          <SelectItem value={TaskStatus.CANCELLED} className="text-[10px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50">Cancelled</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -1758,9 +2459,20 @@ export function TaskEngine({
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center space-x-2">
-                        <div className="flex items-center text-xs font-semibold text-zinc-650">
-                          <Clock className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
-                          <span>{task.dueDate}</span>
+                        <div className="flex items-center text-xs font-semibold text-zinc-650 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 rounded-lg px-2 py-0.5 shadow-sm">
+                          <Calendar className="w-3.5 h-3.5 mr-1.5 text-zinc-400 shrink-0" />
+                          <input 
+                            type="date" 
+                            value={task.dueDate || ''}
+                            onChange={(e) => {
+                              const newVal = e.target.value;
+                              if (newVal) {
+                                setTasks(prev => prev.map(t => t.id === task.id ? { ...t, dueDate: newVal, updatedAt: new Date().toISOString() } : t));
+                                toast.success(`Task "${task.name}" deadline changed to ${newVal}.`);
+                              }
+                            }}
+                            className="bg-transparent border-none text-xs font-semibold text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-0 p-0 w-[115px] cursor-pointer"
+                          />
                         </div>
                         {isUpcoming && (
                           <Badge variant="outline" className="text-[9px] font-black uppercase text-amber-500 border-amber-500/40 bg-amber-500/5 px-1.5 py-0 select-none animate-pulse shrink-0">
@@ -1819,13 +2531,51 @@ export function TaskEngine({
                         >
                           <MoreHorizontal className="w-4 h-4 text-zinc-400" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuContent align="end" className="w-52 rounded-xl border-zinc-200">
+                          <div className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 px-3 py-1.5">Quick Actions</div>
+                          {task.status !== TaskStatus.DONE && (
+                            <DropdownMenuItem 
+                              onClick={() => handleUpdateTaskStatus(task.id, TaskStatus.DONE)}
+                              className="text-xs font-semibold cursor-pointer text-emerald-600 focus:text-emerald-700 focus:bg-emerald-50"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-emerald-500" />
+                              Complete Task
+                            </DropdownMenuItem>
+                          )}
+                          {task.status !== TaskStatus.REVIEW && (
+                            <DropdownMenuItem 
+                              onClick={() => handleUpdateTaskStatus(task.id, TaskStatus.REVIEW)}
+                              className="text-xs font-semibold cursor-pointer text-amber-600 focus:text-amber-700 focus:bg-amber-50"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-2 text-amber-500" />
+                              Send to Internal Review
+                            </DropdownMenuItem>
+                          )}
+                          {task.status !== TaskStatus.CLIENT_REVIEW && (
+                            <DropdownMenuItem 
+                              onClick={() => handleUpdateTaskStatus(task.id, TaskStatus.CLIENT_REVIEW)}
+                              className="text-xs font-semibold cursor-pointer text-teal-600 focus:text-teal-700 focus:bg-teal-50"
+                            >
+                              <Users className="w-3.5 h-3.5 mr-2 text-teal-500" />
+                              Send to Client Review
+                            </DropdownMenuItem>
+                          )}
+                          {task.status !== TaskStatus.IN_PROGRESS && (
+                            <DropdownMenuItem 
+                              onClick={() => handleUpdateTaskStatus(task.id, TaskStatus.IN_PROGRESS)}
+                              className="text-xs font-semibold cursor-pointer text-blue-600 focus:text-blue-700 focus:bg-blue-50"
+                            >
+                              <Play className="w-3.5 h-3.5 mr-2 text-blue-500" />
+                              Set In Progress
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             variant="destructive"
                             onClick={() => handleDeleteTask(task.id)}
-                            className="text-xs font-bold uppercase tracking-widest cursor-pointer"
+                            className="text-xs font-bold uppercase tracking-widest cursor-pointer text-red-600 focus:text-red-700 focus:bg-red-50"
                           >
-                            <Trash2 className="w-3.5 h-3.5 mr-2" />
+                            <Trash2 className="w-3.5 h-3.5 mr-2 text-red-500" />
                             Delete Task
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -2487,9 +3237,20 @@ export function TaskEngine({
                             {/* Clock timer + Context Trigger Menu */}
                             <div className="flex items-center space-x-1.5 shrink-0">
                               {!(elapsedTimes[task.id] > 0) && (
-                                <div className="flex items-center text-[10px] text-zinc-400 dark:text-zinc-500 font-medium whitespace-nowrap font-mono mr-0.5">
-                                  <Clock className="w-3 h-3 mr-1 shrink-0" />
-                                  <span>{task.dueDate ? task.dueDate.split('-').slice(1).join('/') : 'N/A'}</span>
+                                <div className="flex items-center text-[10px] text-zinc-400 dark:text-zinc-500 font-medium whitespace-nowrap font-mono mr-0.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800 rounded px-1.5 py-0.5" onClick={(e) => e.stopPropagation()}>
+                                  <Calendar className="w-3 h-3 mr-1 shrink-0 text-zinc-400" />
+                                  <input 
+                                    type="date" 
+                                    value={task.dueDate || ''}
+                                    onChange={(e) => {
+                                      const newVal = e.target.value;
+                                      if (newVal) {
+                                        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, dueDate: newVal, updatedAt: new Date().toISOString() } : t));
+                                        toast.success(`Task "${task.name}" deadline changed to ${newVal}.`);
+                                      }
+                                    }}
+                                    className="bg-transparent border-none text-[10px] font-semibold text-zinc-650 dark:text-zinc-450 focus:outline-none focus:ring-0 p-0 w-[84px] cursor-pointer"
+                                  />
                                 </div>
                               )}
 
@@ -2637,10 +3398,23 @@ export function TaskEngine({
                         <span>Recurring {task.recurrencePeriod ? `(${task.recurrencePeriod}ly)` : ''}</span>
                       </Badge>
                     )}
-                    <div className="flex items-center space-x-1.5 bg-zinc-100/50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/80 rounded-lg px-2 py-0.5 ml-auto">
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium whitespace-nowrap">
-                        Due: {task.dueDate || 'No Due Date'}
+                    <div className="flex items-center space-x-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800 rounded-lg px-2 py-0.5 ml-auto">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold whitespace-nowrap">
+                        Due:
                       </span>
+                      <input 
+                        type="date" 
+                        value={task.dueDate || ''}
+                        onChange={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal) {
+                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, dueDate: newVal, updatedAt: new Date().toISOString() } : t));
+                            toast.success(`Task "${task.name}" deadline changed to ${newVal}.`);
+                          }
+                        }}
+                        className="bg-transparent border-none text-xs font-semibold text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-0 p-0 w-[115px] cursor-pointer"
+                      />
                       <Button
                         variant="ghost" 
                         size="icon"
@@ -2699,7 +3473,20 @@ export function TaskEngine({
                   </div>
 
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Allocated (Hours)</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 block tracking-wider">Allocated (Hours)</span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        type="button"
+                        className="h-4 text-[8px] font-extrabold uppercase tracking-widest text-brand-secondary hover:text-orange-600 hover:bg-orange-50/50 px-1 -mr-1"
+                        onClick={() => handleAiSuggestEstimateForTask(task)}
+                        disabled={isEstimatingTime}
+                      >
+                        <Sparkles className={cn("w-2.5 h-2.5 mr-0.5", isEstimatingTime && "animate-spin")} />
+                        {isEstimatingTime ? "..." : "AI"}
+                      </Button>
+                    </div>
                     <div className="relative">
                       <Input
                         type="number"
@@ -2911,21 +3698,37 @@ export function TaskEngine({
                             </div>
                           </div>
 
-                          <Button 
-                            variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
-                            size="sm"
-                            className={cn(
-                              "h-9 px-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer",
-                              activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
-                            )}
-                            onClick={(e) => toggleTimer(task.id, e)}
-                          >
-                            {activeTimerTaskId === task.id ? (
-                              <>Stop Live Tracker</>
-                            ) : (
-                              <>Start Live Tracker</>
-                            )}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 px-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-850 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-widest cursor-pointer flex items-center gap-1"
+                              onClick={() => {
+                                setManualLogTask(task);
+                                setManualLogHours("1.0");
+                                setIsManualLogOpen(true);
+                              }}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Log Time
+                            </Button>
+
+                            <Button 
+                              variant={activeTimerTaskId === task.id ? "destructive" : "ghost"} 
+                              size="sm"
+                              className={cn(
+                                "h-9 px-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer",
+                                activeTimerTaskId === task.id ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700"
+                              )}
+                              onClick={(e) => toggleTimer(task.id, e)}
+                            >
+                              {activeTimerTaskId === task.id ? (
+                                <>Stop Live Tracker</>
+                              ) : (
+                                <>Start Live Tracker</>
+                              )}
+                            </Button>
+                          </div>
                         </div>
                       </>
                     );

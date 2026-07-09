@@ -163,7 +163,10 @@ export function LoginPage() {
 
       // Create secure link pointing to our app, preserving pathname (such as /BluOps/)
       let baseNavPath = '/';
-      if (window.location.pathname.includes('/BluOps')) {
+      if (
+        window.location.pathname.toLowerCase().includes('/bluops') ||
+        window.location.hostname === 'blufigdigital.co'
+      ) {
         baseNavPath = '/BluOps/';
       } else {
         baseNavPath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';

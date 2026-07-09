@@ -139,8 +139,9 @@ export function LoginPage() {
       const updatedUser = { ...matchedUser, resetToken, resetExpiry };
       await saveDocToFirestore('users', updatedUser);
 
-      // Create secure link pointing to our app
-      const resetLink = `${window.location.origin}/?action=reset-password&email=${encodeURIComponent(matchedUser.email)}&token=${resetToken}`;
+      // Create secure link pointing to our app, preserving pathname (such as /BluOps/)
+      const baseNavPath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+      const resetLink = `${window.location.origin}${baseNavPath}?action=reset-password&email=${encodeURIComponent(matchedUser.email)}&token=${resetToken}`;
 
       // Fetch custom SMTP configuration if set
       let customSmtp = null;

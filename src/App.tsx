@@ -2695,7 +2695,12 @@ function Dashboard() {
 
 function DashboardWrapper() {
   const { user } = useAuth();
-  if (!user) {
+  
+  // Intercept if an active secure reset link is opened in the URL
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get('action');
+  
+  if (action === 'reset-password' || !user) {
     return <LoginPage />;
   }
   return <Dashboard />;

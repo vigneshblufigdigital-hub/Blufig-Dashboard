@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '../../contexts/AuthContext';
 import { MOCK_USERS } from '../../mockData';
 import { UserRole, UserProfile } from '../../types';
-import { syncCollection, saveDocToFirestore, getDocFromFirestore } from '../../lib/firebase';
+import { syncCollection, saveDocToFirestore, getDocFromFirestore, seedCollectionIfEmpty } from '../../lib/firebase';
 import { getApiUrl, safeFetch, safeStringify } from '../../lib/api';
 import { toast } from 'sonner';
 import { 
@@ -39,10 +39,17 @@ export function LoginPage() {
   const [dbUsersSyncing, setDbUsersSyncing] = useState(true);
 
   React.useEffect(() => {
-    const unsub = syncCollection<UserProfile>('users', (data) => {
+    const unsub = syncCollection<UserProfile>('users', async (data) => {
       if (data && data.length > 0) {
         setDbUsers(data);
         setDbUsersSyncing(false);
+      } else {
+        // Safe database seeding fallback if collection is empty
+        try {
+          await seedCollectionIfEmpty('users', MOCK_USERS);
+        } catch (e) {
+          console.error("Failed to seed users from LoginPage:", e);
+        }
       }
     });
 
@@ -57,27 +64,42 @@ export function LoginPage() {
     };
   }, []);
 
-  // Check for secure password reset link on mount/sync
+  // Check for secure password reset link on mount/sync (one-time execution pattern)
+  const hasProcessedRef = React.useRef(false);
+
   React.useEffect(() => {
     const handleResetURL = () => {
+      if (hasProcessedRef.current) return;
+
       const params = new URLSearchParams(window.location.search);
       const action = params.get('action');
       const emailParam = params.get('email');
       const tokenParam = params.get('token');
 
-      if (action === 'reset-password' && emailParam && tokenParam && dbUsers.length > 0) {
-        const user = dbUsers.find(u => u.email.toLowerCase() === emailParam.toLowerCase());
-        if (user) {
-          if (user.resetToken === tokenParam) {
-            if (user.resetExpiry && Date.now() < user.resetExpiry) {
-              setResetTokenUser(user);
-              setIsResettingPassword(true);
-              toast.success(`Valid secure password reset link detected for ${user.name}!`);
+      if (action === 'reset-password' && emailParam && tokenParam) {
+        if (dbUsers.length > 0) {
+          hasProcessedRef.current = true;
+          const user = dbUsers.find(u => u.email.toLowerCase() === emailParam.toLowerCase());
+          if (user) {
+            if (user.resetToken === tokenParam) {
+              if (user.resetExpiry && Date.now() < user.resetExpiry) {
+                setResetTokenUser(user);
+                setIsResettingPassword(true);
+                toast.success(`Valid secure password reset link detected for ${user.name}!`);
+              } else {
+                toast.error("This password reset link has expired. Please request a new one.");
+                // Clean up URL query parameters
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
             } else {
-              toast.error("This password reset link has expired. Please request a new one.");
+              toast.error("Invalid secure reset token.");
+              // Clean up URL query parameters
+              window.history.replaceState({}, document.title, window.location.pathname);
             }
           } else {
-            toast.error("Invalid secure reset token.");
+            toast.error("No matching user profile found for this password reset link.");
+            // Clean up URL query parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
           }
         }
       }

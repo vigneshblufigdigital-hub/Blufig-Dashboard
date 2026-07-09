@@ -59,6 +59,57 @@ export function TimeSheet({
 }: TimeSheetProps) {
   const { user: currentUser } = useAuth();
   
+  const formatLogTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} mins`;
+  };
+
+  const parseManualDurationString = (input: string): number => {
+    let trimmed = input.trim().toLowerCase();
+    if (!trimmed) return 0;
+
+    // Strip out trailing labels (mins, hrs, etc.) if any
+    trimmed = trimmed.replace(/\s*(?:mins|min|hrs|hr|hours|hour|m|h)\s*$/, '');
+
+    // 1. Check HH:MM format (e.g. 01:26, 1:26)
+    const hhmmRegex = /^(\d+):([0-5]?\d)$/;
+    const hhmmMatch = trimmed.match(hhmmRegex);
+    if (hhmmMatch) {
+      const hours = parseInt(hhmmMatch[1], 10);
+      const minutes = parseInt(hhmmMatch[2], 10);
+      return (hours * 3600) + (minutes * 60);
+    }
+
+    // 2. Check textual format with h/m (e.g., 1h 26m, 86m)
+    const flexibleHMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)/);
+    const flexibleMMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes)/);
+    
+    if (flexibleHMatch || flexibleMMatch) {
+      let totalSeconds = 0;
+      if (flexibleHMatch) {
+        totalSeconds += parseFloat(flexibleHMatch[1]) * 3600;
+      }
+      if (flexibleMMatch) {
+        totalSeconds += parseFloat(flexibleMMatch[1]) * 60;
+      }
+      return totalSeconds;
+    }
+
+    // 3. Check plain number (assuming minutes)
+    const numRegex = /^(\d+(?:\.\d+)?)$/;
+    if (numRegex.test(trimmed)) {
+      const val = parseFloat(trimmed);
+      if (trimmed.includes('.')) {
+        return Math.round(val * 3600);
+      } else {
+        return val * 60;
+      }
+    }
+
+    return 0;
+  };
+  
   // Find current running task
   const activeTask = tasks.find(t => t.id === activeTimerTaskId);
   const activeProject = activeTask ? projects.find(p => p.id === activeTask.projectId) : null;
@@ -91,8 +142,7 @@ export function TimeSheet({
   const [manualProjectId, setManualProjectId] = React.useState('');
   const [manualAssigneeId, setManualAssigneeId] = React.useState(currentUser?.id || '');
   const [manualDate, setManualDate] = React.useState(getTodayDate());
-  const [manualHours, setManualHours] = React.useState('0');
-  const [manualMinutes, setManualMinutes] = React.useState('0');
+  const [manualDurationInput, setManualDurationInput] = React.useState('01:26 mins');
   const [manualBilling, setManualBilling] = React.useState<'Billable' | 'Non-Billable'>('Billable');
   const [manualCategory, setManualCategory] = React.useState('Production');
   const [manualDescription, setManualDescription] = React.useState('');
@@ -115,14 +165,17 @@ export function TimeSheet({
       return;
     }
 
-    const hours = parseInt(manualHours, 10) || 0;
-    const minutes = parseInt(manualMinutes, 10) || 0;
-    const totalSeconds = (hours * 3600) + (minutes * 60);
+    const totalSeconds = parseManualDurationString(manualDurationInput);
 
     if (totalSeconds <= 0) {
-      toast.error('Please enter a valid duration (hours or minutes).');
+      toast.error('Please enter a valid duration (e.g. 01:26 or 01:26 mins).');
       return;
     }
+
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const hStr = hours.toString().padStart(2, '0');
+    const mStr = minutes.toString().padStart(2, '0');
 
     const newTask: Task = {
       id: 'task_manual_' + Date.now(),
@@ -144,14 +197,13 @@ export function TimeSheet({
     };
 
     setTasks(prev => [...prev, newTask]);
-    toast.success(`Logged ${hours}h ${minutes}m for "${manualActivityName}" successfully!`);
+    toast.success(`Logged ${hStr}:${mStr} mins for "${manualActivityName}" successfully!`);
 
     // Reset Form State
     setManualActivityName('');
     setManualProjectId('');
     setManualDescription('');
-    setManualHours('0');
-    setManualMinutes('0');
+    setManualDurationInput('01:26 mins');
     setManualBilling('Billable');
     setManualCategory('Production');
     setIsManualEntryOpen(false);
@@ -159,9 +211,7 @@ export function TimeSheet({
 
   // Edit Log State
   const [editingLog, setEditingLog] = React.useState<any | null>(null);
-  const [editHours, setEditHours] = React.useState<string>('0');
-  const [editMinutes, setEditMinutes] = React.useState<string>('0');
-  const [editSeconds, setEditSeconds] = React.useState<string>('0');
+  const [editDurationInput, setEditDurationInput] = React.useState<string>('01:26 mins');
   const [staticDurationOverrides, setStaticDurationOverrides] = React.useState<Record<string, number>>({});
 
   const handleStartEditLog = (log: any) => {
@@ -169,18 +219,24 @@ export function TimeSheet({
     const totalSecs = log.durationSecs;
     const h = Math.floor(totalSecs / 3600);
     const m = Math.floor((totalSecs % 3600) / 60);
-    const s = totalSecs % 60;
-    setEditHours(String(h));
-    setEditMinutes(String(m));
-    setEditSeconds(String(s));
+    const hStr = h.toString().padStart(2, '0');
+    const mStr = m.toString().padStart(2, '0');
+    setEditDurationInput(`${hStr}:${mStr} mins`);
   };
 
   const handleSaveEditLog = () => {
     if (!editingLog) return;
-    const h = parseInt(editHours, 10) || 0;
-    const m = parseInt(editMinutes, 10) || 0;
-    const s = parseInt(editSeconds, 10) || 0;
-    const totalSecs = (h * 3600) + (m * 60) + s;
+    const totalSecs = parseManualDurationString(editDurationInput);
+
+    if (totalSecs <= 0) {
+      toast.error('Please enter a valid duration (e.g. 01:26 or 01:26 mins).');
+      return;
+    }
+
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const hStr = h.toString().padStart(2, '0');
+    const mStr = m.toString().padStart(2, '0');
 
     if (editingLog.isReal) {
       setTasks(prev => prev.map(t => {
@@ -205,7 +261,7 @@ export function TimeSheet({
       setStaticDurationOverrides(prev => ({ ...prev, [editingLog.id]: totalSecs }));
     }
 
-    toast.success(`Updated logged time for "${editingLog.task}" to ${h}h ${m}m ${s}s!`);
+    toast.success(`Updated logged time for "${editingLog.task}" to ${hStr}:${mStr} mins!`);
     setEditingLog(null);
   };
 
@@ -362,7 +418,7 @@ export function TimeSheet({
       `"${log.project.replace(/"/g, '""')}"`,
       `"${log.user.replace(/"/g, '""')}"`,
       `"${log.date}"`,
-      typeof log.durationSecs === 'number' ? formatTime(log.durationSecs) : log.durationSecs,
+      typeof log.durationSecs === 'number' ? formatLogTime(log.durationSecs) : log.durationSecs,
       log.durationSecs,
       log.billing
     ]);
@@ -373,7 +429,7 @@ export function TimeSheet({
       '""',
       '""',
       '""',
-      formatTime(totalDurationSecs),
+      formatLogTime(totalDurationSecs),
       totalDurationSecs,
       '""'
     ];
@@ -547,7 +603,7 @@ export function TimeSheet({
                     <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800">
                       <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-1">Total Time Spent</span>
                       <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight block">
-                        {formatTime(totalProjectSeconds)}
+                        {formatLogTime(totalProjectSeconds)}
                       </span>
                       <span className="text-[10px] text-zinc-400 font-semibold block mt-0.5">
                         {projectTasks.length} total tasks
@@ -556,7 +612,7 @@ export function TimeSheet({
                     <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800">
                       <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block mb-1">Average / Task</span>
                       <span className="text-base font-bold text-zinc-800 dark:text-zinc-100 font-mono tracking-tight block">
-                        {projectTasks.length > 0 ? formatTime(Math.round(totalProjectSeconds / projectTasks.length)) : '0:00:00'}
+                        {projectTasks.length > 0 ? formatLogTime(Math.round(totalProjectSeconds / projectTasks.length)) : '00:00'}
                       </span>
                       <span className="text-[10px] text-zinc-400 font-semibold block mt-0.5">
                         across logged activities
@@ -620,7 +676,7 @@ export function TimeSheet({
                                       "font-mono text-xs border-none px-2 h-5 tabular-nums",
                                       tSeconds > 0 ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
                                     )}>
-                                      {formatTime(tSeconds)}
+                                      {formatLogTime(tSeconds)}
                                     </Badge>
                                   </TableCell>
                                 </TableRow>
@@ -752,32 +808,14 @@ export function TimeSheet({
                    {/* Duration & Billing side-by-side */}
                    <div className="grid grid-cols-2 gap-3">
                      <div className="grid gap-2">
-                       <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Duration</Label>
-                       <div className="flex items-center gap-2">
-                         <div className="flex items-center gap-1">
-                           <Input 
-                             type="number" 
-                             min="0"
-                             className="w-16 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs font-semibold"
-                             value={manualHours}
-                             onChange={(e) => setManualHours(e.target.value)}
-                             placeholder="H"
-                           />
-                           <span className="text-xs text-zinc-400 font-semibold">hrs</span>
-                         </div>
-                         <div className="flex items-center gap-1">
-                           <Input 
-                             type="number" 
-                             min="0"
-                             max="59"
-                             className="w-16 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs font-semibold"
-                             value={manualMinutes}
-                             onChange={(e) => setManualMinutes(e.target.value)}
-                             placeholder="M"
-                           />
-                           <span className="text-xs text-zinc-400 font-semibold">mins</span>
-                         </div>
-                       </div>
+                       <Label htmlFor="manual-duration" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Duration (hrs:mins)</Label>
+                       <Input 
+                         id="manual-duration" 
+                         placeholder="e.g. 01:26 mins or 01:26"
+                         className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs font-semibold"
+                         value={manualDurationInput}
+                         onChange={(e) => setManualDurationInput(e.target.value)}
+                       />
                      </div>
                      <div className="grid gap-2">
                        <Label htmlFor="manual-billing" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Billing Type</Label>
@@ -930,7 +968,7 @@ export function TimeSheet({
                           ? "bg-orange-500 text-white" 
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-300"
                       )}>
-                        {typeof log.durationSecs === 'number' ? formatTime(log.durationSecs) : log.durationSecs}
+                        {typeof log.durationSecs === 'number' ? formatLogTime(log.durationSecs) : log.durationSecs}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -1021,45 +1059,15 @@ export function TimeSheet({
             </p>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-hours" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Hours</Label>
-                <Input 
-                  id="edit-hours" 
-                  type="number" 
-                  min="0"
-                  className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
-                  value={editHours}
-                  onChange={(e) => setEditHours(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-minutes" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Minutes</Label>
-                <Input 
-                  id="edit-minutes" 
-                  type="number" 
-                  min="0"
-                  max="59"
-                  className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
-                  value={editMinutes}
-                  onChange={(e) => setEditMinutes(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-seconds" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Seconds</Label>
-                <Input 
-                  id="edit-seconds" 
-                  type="number" 
-                  min="0"
-                  max="59"
-                  className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
-                  value={editSeconds}
-                  onChange={(e) => setEditSeconds(e.target.value)}
-                  placeholder="0"
-                />
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-duration" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Duration (hrs:mins)</Label>
+              <Input 
+                id="edit-duration" 
+                placeholder="e.g. 01:26 mins or 01:26"
+                className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs font-semibold"
+                value={editDurationInput}
+                onChange={(e) => setEditDurationInput(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">

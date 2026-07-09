@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
-import { safeFetch, safeStringify } from '../../lib/api';
+import { getApiUrl, safeFetch, safeStringify } from '../../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -181,7 +181,7 @@ export function SMTPDiagnostics() {
     setTestResult(null);
 
     try {
-      const data = await safeFetch('/api/test-smtp', {
+      const data = await safeFetch(getApiUrl('/api/test-smtp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: safeStringify({
@@ -210,7 +210,7 @@ export function SMTPDiagnostics() {
     setTestResult(null);
 
     try {
-      const data = await safeFetch('/api/test-smtp', {
+      const data = await safeFetch(getApiUrl('/api/test-smtp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: safeStringify({
@@ -500,22 +500,24 @@ export function SMTPDiagnostics() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="email"
-                  value={testRecipient}
-                  onChange={e => setTestRecipient(e.target.value)}
-                  placeholder="test-recipient@domain.com"
-                  className="flex-1 text-xs font-medium px-3.5 py-2.5 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:border-zinc-900 outline-none text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400"
-                />
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3">
+                <div className="w-full">
+                  <input
+                    type="email"
+                    value={testRecipient}
+                    onChange={e => setTestRecipient(e.target.value)}
+                    placeholder="test-recipient@domain.com"
+                    className="w-full text-xs font-medium px-3.5 py-2.5 bg-zinc-50/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:border-zinc-900 outline-none text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400"
+                  />
+                </div>
                 
-                <div className="flex gap-2 shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={handleTestEmail}
                     disabled={isTesting || !config.smtpHost || !config.smtpUser || !config.smtpPass}
-                    className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-100 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                     title={(!config.smtpHost || !config.smtpUser || !config.smtpPass) ? "Provide Host, Username, and Password above to unlock test button." : ""}
                   >
                     {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -526,7 +528,7 @@ export function SMTPDiagnostics() {
                     type="button"
                     onClick={handleTestPresetDelivery}
                     disabled={isTesting}
-                    className="px-3.5 py-2.5 border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all flex items-center gap-1 bg-transparent cursor-pointer disabled:opacity-50"
+                    className="w-full px-3.5 py-2.5 border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all flex items-center justify-center gap-1 bg-transparent cursor-pointer disabled:opacity-50"
                     title="Deliver a real email using BluFig's verification preset (Hostinger)"
                   >
                     Use test email preset

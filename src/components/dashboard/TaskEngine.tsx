@@ -102,6 +102,51 @@ interface TaskEngineProps {
   setHighlightedTaskId?: (id: string | null) => void;
 }
 
+const parseManualDurationString = (input: string): number => {
+  let trimmed = input.trim().toLowerCase();
+  if (!trimmed) return 0;
+
+  // Strip out trailing labels (mins, hrs, etc.) if any
+  trimmed = trimmed.replace(/\s*(?:mins|min|hrs|hr|hours|hour|m|h)\s*$/, '');
+
+  // 1. Check HH:MM format (e.g. 01:26, 1:26)
+  const hhmmRegex = /^(\d+):([0-5]?\d)$/;
+  const hhmmMatch = trimmed.match(hhmmRegex);
+  if (hhmmMatch) {
+    const hours = parseInt(hhmmMatch[1], 10);
+    const minutes = parseInt(hhmmMatch[2], 10);
+    return (hours * 3600) + (minutes * 60);
+  }
+
+  // 2. Check textual format with h/m (e.g., 1h 26m, 86m)
+  const flexibleHMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)/);
+  const flexibleMMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes)/);
+  
+  if (flexibleHMatch || flexibleMMatch) {
+    let totalSeconds = 0;
+    if (flexibleHMatch) {
+      totalSeconds += parseFloat(flexibleHMatch[1]) * 3600;
+    }
+    if (flexibleMMatch) {
+      totalSeconds += parseFloat(flexibleMMatch[1]) * 60;
+    }
+    return totalSeconds;
+  }
+
+  // 3. Check plain number (assuming minutes)
+  const numRegex = /^(\d+(?:\.\d+)?)$/;
+  if (numRegex.test(trimmed)) {
+    const val = parseFloat(trimmed);
+    if (trimmed.includes('.')) {
+      return Math.round(val * 3600);
+    } else {
+      return val * 60;
+    }
+  }
+
+  return 0;
+};
+
 export function TaskEngine({ 
   filterProjectId, 
   onClearFilter, 
@@ -830,7 +875,7 @@ export function TaskEngine({
   // Manual Time Log State
   const [isManualLogOpen, setIsManualLogOpen] = useState(false);
   const [manualLogTask, setManualLogTask] = useState<Task | null>(null);
-  const [manualLogHours, setManualLogHours] = useState<string>("1.0");
+  const [manualLogDurationInput, setManualLogDurationInput] = useState<string>("01:00 mins");
   const [manualLogNote, setManualLogNote] = useState<string>("");
   const [isEstimatingTime, setIsEstimatingTime] = useState(false);
 
@@ -1129,13 +1174,14 @@ export function TaskEngine({
 
   const handleSaveManualLog = () => {
     if (!manualLogTask) return;
-    const changeHours = parseFloat(manualLogHours) || 0;
-    if (changeHours === 0) {
-      toast.error("Please enter a valid amount of hours");
+    
+    const changeSeconds = parseManualDurationString(manualLogDurationInput);
+    if (changeSeconds <= 0) {
+      toast.error("Please enter a valid duration (e.g., 01:26 or 01:26 mins)");
       return;
     }
 
-    const changeSeconds = Math.round(changeHours * 3600);
+    const changeHours = changeSeconds / 3600;
 
     // Get current logged seconds
     const currentSeconds = elapsedTimes[manualLogTask.id] !== undefined
@@ -1168,13 +1214,18 @@ export function TaskEngine({
       return t;
     }));
 
+    const h = Math.floor(changeSeconds / 3600);
+    const m = Math.floor((changeSeconds % 3600) / 60);
+    const hStr = h.toString().padStart(2, '0');
+    const mStr = m.toString().padStart(2, '0');
+
     toast.success(`Successfully logged manual time for "${manualLogTask.name}"!`, {
-      description: `Logged: ${changeHours > 0 ? '+' : ''}${changeHours.toFixed(2)}h. New total: ${nextHours.toFixed(2)}h.`
+      description: `Logged: ${hStr}:${mStr} mins. New total: ${(nextSeconds / 3600).toFixed(2)}h.`
     });
 
     setIsManualLogOpen(false);
     setManualLogTask(null);
-    setManualLogHours("1.0");
+    setManualLogDurationInput("01:00 mins");
     setManualLogNote("");
   };
 
@@ -2696,21 +2747,19 @@ export function TaskEngine({
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="log-hours" className="text-xs font-black uppercase tracking-wider text-zinc-400">
-                    Hours worked
+                  <Label htmlFor="log-duration" className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                    Hours worked (hrs:mins)
                   </Label>
                   <Input
-                    id="log-hours"
-                    type="number"
-                    step="0.25"
-                    min="0.1"
-                    value={manualLogHours}
-                    onChange={(e) => setManualLogHours(e.target.value)}
-                    placeholder="e.g., 1.5, 2.0"
-                    className="rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
+                    id="log-duration"
+                    type="text"
+                    value={manualLogDurationInput}
+                    onChange={(e) => setManualLogDurationInput(e.target.value)}
+                    placeholder="e.g., 01:26 mins or 01:26"
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 font-semibold"
                   />
                   <span className="text-[10px] text-zinc-400">
-                    Use decimals to log fractional hours (e.g., 0.5 for 30 minutes).
+                    Use format like 01:26 mins, 1.5h, or standard minutes.
                   </span>
                 </div>
                 <div className="grid gap-2">
@@ -3933,7 +3982,7 @@ export function TaskEngine({
                     <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Sel</span>
                   </div>
                 </TableHead>
-                <TableHead className="w-[300px] text-[10px] uppercase font-bold tracking-widest py-4">Task Name</TableHead>
+                <TableHead className="w-[450px] text-[10px] uppercase font-bold tracking-widest py-4">Task Name</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold tracking-widest py-4">Assignee</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold tracking-widest py-4">Status</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold tracking-widest py-4">Priority</TableHead>
@@ -4330,35 +4379,8 @@ export function TaskEngine({
                                           </Button>
                                         </div>
 
-                                        {/* Estimate (Allocated) Time */}
-                                        <div className="flex items-center space-x-1">
-                                          <span className="text-[8px] font-bold text-zinc-400 uppercase">Est:</span>
-                                          <input
-                                            type="text"
-                                            placeholder="00:00"
-                                            value={
-                                              inputDrafts[`est-${subtask.id}`] !== undefined
-                                                ? inputDrafts[`est-${subtask.id}`]
-                                                : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0 ? formatHoursMinutes(subtask.timeEstimate) : '')
-                                            }
-                                            onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                            onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                            className={cn(
-                                              "w-14 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                              inputErrors[`est-${subtask.id}`] 
-                                                ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                            )}
-                                            title={
-                                              inputErrors[`est-${subtask.id}`]
-                                                ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                                : "Allocated time format (e.g. 01:30, 45, 1h 30m)"
-                                            }
-                                          />
-                                        </div>
-
                                         {/* Spent (Logged) Time */}
-                                        <div className="flex items-center space-x-1 border-l border-zinc-200 dark:border-zinc-800 pl-2">
+                                        <div className="flex items-center space-x-1 pl-2">
                                           <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                                           <input
                                             type="text"
@@ -5223,35 +5245,8 @@ export function TaskEngine({
                                             </Button>
                                           </div>
 
-                                          {/* Estimate (Allocated) Time */}
-                                          <div className="flex items-center space-x-1">
-                                            <span className="text-[8px] font-bold text-zinc-400 uppercase">Est:</span>
-                                            <input
-                                              type="text"
-                                              placeholder="00:00"
-                                              value={
-                                                inputDrafts[`est-${subtask.id}`] !== undefined
-                                                  ? inputDrafts[`est-${subtask.id}`]
-                                                  : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0 ? formatHoursMinutes(subtask.timeEstimate) : '')
-                                              }
-                                              onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                              onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                              className={cn(
-                                                "w-14 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                                inputErrors[`est-${subtask.id}`] 
-                                                  ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                  : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                              )}
-                                              title={
-                                                inputErrors[`est-${subtask.id}`]
-                                                  ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                                  : "Allocated time format (e.g. 01:30, 45, 1h 30m)"
-                                              }
-                                            />
-                                          </div>
-
                                           {/* Spent (Logged) Time */}
-                                          <div className="flex items-center space-x-1 border-l border-zinc-200 dark:border-zinc-800 pl-1.5">
+                                          <div className="flex items-center space-x-1 pl-1.5">
                                             <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                                             <input
                                               type="text"
@@ -6065,35 +6060,8 @@ export function TaskEngine({
                               </Button>
                             </div>
 
-                            {/* Estimate (Allocated) Time */}
-                            <div className="flex items-center space-x-1">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Est:</span>
-                              <input
-                                type="text"
-                                placeholder="00:00"
-                                value={
-                                  inputDrafts[`est-${subtask.id}`] !== undefined
-                                    ? inputDrafts[`est-${subtask.id}`]
-                                    : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0 ? formatHoursMinutes(subtask.timeEstimate) : '')
-                                }
-                                onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                className={cn(
-                                  "w-14 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                  inputErrors[`est-${subtask.id}`] 
-                                    ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                    : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                )}
-                                title={
-                                  inputErrors[`est-${subtask.id}`]
-                                    ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                    : "Allocated time format (e.g. 01:30, 45, 1h 30m)"
-                                }
-                              />
-                            </div>
-
                             {/* Spent (Logged) Time */}
-                            <div className="flex items-center space-x-1 border-l border-zinc-200 dark:border-zinc-800 pl-1.5">
+                            <div className="flex items-center space-x-1 pl-1.5">
                               <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                               <input
                                 type="text"
@@ -6234,7 +6202,7 @@ export function TaskEngine({
                               className="h-9 px-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-widest cursor-pointer flex items-center gap-1"
                               onClick={() => {
                                 setManualLogTask(task);
-                                setManualLogHours("1.0");
+                                setManualLogDurationInput("01:00 mins");
                                 setIsManualLogOpen(true);
                               }}
                             >

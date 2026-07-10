@@ -198,6 +198,40 @@ export function TaskEngine({
     return `${sign}${hrsStr}:${minsStr}`;
   };
 
+  const getTaskTimingDetails = (task: Task) => {
+    const directLoggedSeconds = elapsedTimes[task.id] !== undefined 
+      ? elapsedTimes[task.id] 
+      : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600));
+    const directEstimate = task.timeEstimate || 0;
+
+    const subTasks = task.subTasks || [];
+    const hasSubTasks = subTasks.length > 0;
+    
+    let subtasksLoggedSeconds = 0;
+    let subtasksEstimate = 0;
+    
+    subTasks.forEach(st => {
+      const stLoggedSecs = subTaskElapsedTimes[st.id] !== undefined
+        ? subTaskElapsedTimes[st.id]
+        : (st.timeLoggedSeconds || ((st.timeLogged || 0) * 3600));
+      subtasksLoggedSeconds += stLoggedSecs;
+      subtasksEstimate += st.timeEstimate || 0;
+    });
+
+    const totalLoggedSeconds = directLoggedSeconds + subtasksLoggedSeconds;
+    const totalEstimate = directEstimate + subtasksEstimate;
+
+    return {
+      directLoggedSeconds,
+      directEstimate,
+      subtasksLoggedSeconds,
+      subtasksEstimate,
+      totalLoggedSeconds,
+      totalEstimate,
+      hasSubTasks
+    };
+  };
+
   const [inputDrafts, setInputDrafts] = useState<Record<string, string>>({});
   const [inputErrors, setInputErrors] = useState<Record<string, boolean>>({});
 
@@ -4152,22 +4186,40 @@ export function TaskEngine({
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
-                        const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
+                        const { 
+                          directLoggedSeconds, 
+                          directEstimate, 
+                          subtasksLoggedSeconds, 
+                          subtasksEstimate, 
+                          totalLoggedSeconds, 
+                          totalEstimate, 
+                          hasSubTasks 
+                        } = getTaskTimingDetails(task);
+                        
+                        const displayEstimate = hasSubTasks ? totalEstimate : directEstimate;
+                        const displayLogged = hasSubTasks ? totalLoggedSeconds / 3600 : directLoggedSeconds / 3600;
+                        const isExceeded = displayEstimate > 0 && displayLogged > displayEstimate;
+                        
                         return (
                           <div className="flex flex-col gap-1 select-none">
-                            <div className={cn(
-                              "flex items-center text-xs font-semibold px-2 py-1 rounded-md w-fit border",
-                              isExceeded 
-                                ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
-                                : "text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900 border-transparent"
-                            )}>
-                              {formatHoursMinutes(task.timeEstimate)}
+                            <div 
+                              className={cn(
+                                "flex items-center text-xs font-semibold px-2 py-1 rounded-md w-fit border",
+                                isExceeded 
+                                  ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
+                                  : "text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-900 border-transparent"
+                              )}
+                              title={hasSubTasks ? `Direct Task: ${formatHoursMinutes(directEstimate)} + Subtasks: ${formatHoursMinutes(subtasksEstimate)}` : "Task allocated duration limit"}
+                            >
+                              <span>{formatHoursMinutes(displayEstimate)}</span>
+                              {hasSubTasks && (
+                                <span className="ml-1.5 text-[8px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1 rounded font-black uppercase tracking-wider">ROLLUP</span>
+                              )}
                             </div>
                             {isExceeded && (
                               <span className="text-[9px] font-extrabold uppercase text-rose-500 flex items-center gap-1 whitespace-nowrap">
                                 <AlertTriangle className="w-2.5 h-2.5" />
-                                <span>+{formatHoursMinutes(loggedHours - task.timeEstimate)} over</span>
+                                <span>+{formatHoursMinutes(displayLogged - displayEstimate)} over</span>
                               </span>
                             )}
                           </div>
@@ -4381,6 +4433,34 @@ export function TaskEngine({
                                         </div>
 
                                         {/* Spent (Logged) Time */}
+                                        <div className="flex items-center space-x-1 pl-2 border-r border-zinc-200 dark:border-zinc-800 pr-2">
+                                          <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
+                                          <input
+                                            type="text"
+                                            placeholder="00:00"
+                                            value={
+                                              inputDrafts[`est-${subtask.id}`] !== undefined
+                                                ? inputDrafts[`est-${subtask.id}`]
+                                                : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
+                                                    ? formatHoursMinutes(subtask.timeEstimate)
+                                                    : '')
+                                            }
+                                            onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
+                                            onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
+                                            className={cn(
+                                              "w-12 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                              inputErrors[`est-${subtask.id}`] 
+                                                ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
+                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
+                                            )}
+                                            title={
+                                              inputErrors[`est-${subtask.id}`]
+                                                ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
+                                                : "Manually set estimated/allocated time (e.g. 1h, 45m)"
+                                            }
+                                          />
+                                        </div>
+
                                         <div className="flex items-center space-x-1 pl-2">
                                           <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                                           <input
@@ -4399,7 +4479,7 @@ export function TaskEngine({
                                             onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
                                             onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
                                             className={cn(
-                                              "w-14 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                              "w-12 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
                                               inputErrors[`spent-${subtask.id}`] 
                                                 ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
                                                 : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
@@ -5145,17 +5225,41 @@ export function TaskEngine({
                               {task.type}
                             </div>
                             {(() => {
-                              const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
-                              const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
-                              if (isExceeded) {
-                                return (
-                                  <div className="mt-2.5 px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5 w-full select-none" onClick={(e) => e.stopPropagation()}>
-                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                    <span>Limit Exceeded: {formatHoursMinutes(loggedHours)} / {formatHoursMinutes(task.timeEstimate)} (+{formatHoursMinutes(loggedHours - task.timeEstimate)} over)</span>
-                                  </div>
-                                );
-                              }
-                              return null;
+                              const { 
+                                directLoggedSeconds, 
+                                directEstimate, 
+                                subtasksLoggedSeconds, 
+                                subtasksEstimate, 
+                                totalLoggedSeconds, 
+                                totalEstimate, 
+                                hasSubTasks 
+                              } = getTaskTimingDetails(task);
+                              
+                              const displayEstimate = hasSubTasks ? totalEstimate : directEstimate;
+                              const displayLogged = hasSubTasks ? totalLoggedSeconds / 3600 : directLoggedSeconds / 3600;
+                              const isExceeded = displayEstimate > 0 && displayLogged > displayEstimate;
+                              
+                              return (
+                                <div className="space-y-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
+                                  {isExceeded && (
+                                    <div className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1.5 w-full select-none">
+                                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                      <span>Limit Exceeded: {formatHoursMinutes(displayLogged)} / {formatHoursMinutes(displayEstimate)} (+{formatHoursMinutes(displayLogged - displayEstimate)} over)</span>
+                                    </div>
+                                  )}
+                                  {hasSubTasks && (
+                                    <div className="px-2.5 py-1.5 rounded-xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/10 text-[10px] text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-between gap-1 w-full select-none" title="Sum of parent task and all subtasks duration and tracked times">
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="w-3 h-3 text-indigo-500 shrink-0" />
+                                        <span>Cumulative Logged</span>
+                                      </span>
+                                      <span className="font-mono text-[9px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                                        {formatTime(totalLoggedSeconds)} / {formatHoursMinutes(totalEstimate)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
                             })()}
                           </div>
 
@@ -5265,6 +5369,34 @@ export function TaskEngine({
                                           </div>
 
                                           {/* Spent (Logged) Time */}
+                                          <div className="flex items-center space-x-1 pl-1.5 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
+                                            <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
+                                            <input
+                                              type="text"
+                                              placeholder="00:00"
+                                              value={
+                                                inputDrafts[`est-${subtask.id}`] !== undefined
+                                                  ? inputDrafts[`est-${subtask.id}`]
+                                                  : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
+                                                      ? formatHoursMinutes(subtask.timeEstimate)
+                                                      : '')
+                                              }
+                                              onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
+                                              onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
+                                              className={cn(
+                                                "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                                inputErrors[`est-${subtask.id}`] 
+                                                  ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
+                                                  : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
+                                              )}
+                                              title={
+                                                inputErrors[`est-${subtask.id}`]
+                                                  ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
+                                                  : "Manually set estimated/allocated time (e.g. 1h, 45m)"
+                                              }
+                                            />
+                                          </div>
+
                                           <div className="flex items-center space-x-1 pl-1.5">
                                             <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                                             <input
@@ -5283,7 +5415,7 @@ export function TaskEngine({
                                               onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
                                               onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
                                               className={cn(
-                                                "w-14 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                                "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
                                                 inputErrors[`spent-${subtask.id}`] 
                                                   ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
                                                   : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
@@ -6080,6 +6212,34 @@ export function TaskEngine({
                             </div>
 
                             {/* Spent (Logged) Time */}
+                            <div className="flex items-center space-x-1 pl-1.5 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
+                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
+                              <input
+                                type="text"
+                                placeholder="00:00"
+                                value={
+                                  inputDrafts[`est-${subtask.id}`] !== undefined
+                                    ? inputDrafts[`est-${subtask.id}`]
+                                    : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
+                                        ? formatHoursMinutes(subtask.timeEstimate)
+                                        : '')
+                                }
+                                onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
+                                onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
+                                className={cn(
+                                  "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                  inputErrors[`est-${subtask.id}`] 
+                                    ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
+                                    : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
+                                )}
+                                title={
+                                  inputErrors[`est-${subtask.id}`]
+                                    ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
+                                    : "Manually set estimated/allocated time (e.g. 1h, 45m)"
+                                }
+                              />
+                            </div>
+
                             <div className="flex items-center space-x-1 pl-1.5">
                               <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
                               <input
@@ -6098,7 +6258,7 @@ export function TaskEngine({
                                 onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
                                 onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
                                 className={cn(
-                                  "w-14 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                                  "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
                                   inputErrors[`spent-${subtask.id}`] 
                                     ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
                                     : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
@@ -6179,8 +6339,20 @@ export function TaskEngine({
                 {/* Timesheet Duration and Log Toggle inside Modal */}
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-5 space-y-4">
                   {(() => {
-                    const loggedHours = (elapsedTimes[task.id] !== undefined ? elapsedTimes[task.id] : (task.timeLoggedSeconds || ((task.timeLogged || 0) * 3600))) / 3600;
-                    const isExceeded = task.timeEstimate > 0 && loggedHours > task.timeEstimate;
+                    const { 
+                      directLoggedSeconds, 
+                      directEstimate, 
+                      subtasksLoggedSeconds, 
+                      subtasksEstimate, 
+                      totalLoggedSeconds, 
+                      totalEstimate, 
+                      hasSubTasks 
+                    } = getTaskTimingDetails(task);
+                    
+                    const displayEstimate = hasSubTasks ? totalEstimate : directEstimate;
+                    const displayLogged = hasSubTasks ? totalLoggedSeconds / 3600 : directLoggedSeconds / 3600;
+                    const isExceeded = displayEstimate > 0 && displayLogged > displayEstimate;
+                    
                     return (
                       <>
                         {isExceeded && (
@@ -6189,28 +6361,57 @@ export function TaskEngine({
                             <div>
                               <p className="text-[10px] font-extrabold uppercase tracking-widest text-rose-600 dark:text-rose-400">Allotted Time Limit Exceeded</p>
                               <p className="text-[10px] font-medium text-rose-550 dark:text-rose-450 mt-0.5 leading-relaxed">
-                                This task has exceeded its allocation of {formatHoursMinutes(task.timeEstimate)} by {formatHoursMinutes(loggedHours - task.timeEstimate)}.
+                                This task and its subtasks have exceeded the cumulative allocation of {formatHoursMinutes(displayEstimate)} by {formatHoursMinutes(displayLogged - displayEstimate)}.
                               </p>
                             </div>
                           </div>
                         )}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="space-y-0.5">
-                            <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-400 block">Time Spent Tracker</span>
+                        
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border border-zinc-100 dark:border-zinc-800 p-3 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/20">
+                          <div className="space-y-1">
+                            <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-400 block">Direct Task Tracker</span>
                             <div className="flex items-center gap-2">
-                              <span className="font-mono text-lg font-black text-zinc-900 dark:text-white block">
+                              <span className="font-mono text-base font-black text-zinc-900 dark:text-white block">
                                 {formatTime(elapsedTimes[task.id] || 0)}
                               </span>
-                              {task.timeEstimate > 0 && (
+                              {directEstimate > 0 && (
                                 <span className={cn(
                                   "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full font-mono border",
-                                  isExceeded 
+                                  directLoggedSeconds / 3600 > directEstimate 
                                     ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
                                     : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-transparent"
                                 )}>
-                                  Limit: {formatHoursMinutes(task.timeEstimate)}
+                                  Limit: {formatHoursMinutes(directEstimate)}
                                 </span>
                               )}
+                            </div>
+                          </div>
+                          
+                          {hasSubTasks && (
+                            <div className="space-y-1 border-t sm:border-t-0 sm:border-l border-zinc-100 dark:border-zinc-800 pt-2 sm:pt-0 sm:pl-4">
+                              <span className="text-[9px] uppercase font-extrabold text-indigo-500 dark:text-indigo-400 block">Cumulative Rollup (Task + Subtasks)</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-base font-black text-indigo-600 dark:text-indigo-400 block">
+                                  {formatTime(totalLoggedSeconds)}
+                                </span>
+                                {totalEstimate > 0 && (
+                                  <span className={cn(
+                                    "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full font-mono border",
+                                    isExceeded 
+                                      ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/50" 
+                                      : "bg-indigo-50 dark:bg-indigo-950/15 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/40"
+                                  )}>
+                                    Cumulative Limit: {formatHoursMinutes(totalEstimate)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <span className="text-[9px] uppercase font-extrabold text-zinc-400 dark:text-zinc-400 block">Time Spent Tracker Controls</span>
+                            <div className="flex items-center gap-2">
                               {(elapsedTimes[task.id] || 0) > 0 && (
                                 <Button
                                   variant="ghost"

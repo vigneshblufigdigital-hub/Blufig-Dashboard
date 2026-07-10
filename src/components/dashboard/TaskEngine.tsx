@@ -40,7 +40,8 @@ import {
   TrendingUp,
   Zap,
   GitFork,
-  Workflow
+  Workflow,
+  RotateCcw
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -4578,9 +4579,27 @@ export function TaskEngine({
                                       Time tracker & Manual Log
                                     </span>
                                   </div>
-                                  <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
-                                    Total Logged: {formatTime(elapsedTimes[task.id] || 0)}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                                      Total Logged: {formatTime(elapsedTimes[task.id] || 0)}
+                                    </span>
+                                    {(elapsedTimes[task.id] || 0) > 0 && (
+                                      <Button
+                                        variant="ghost"
+                                        className="h-5 px-1.5 text-[8px] font-extrabold uppercase tracking-widest text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded cursor-pointer flex items-center gap-1"
+                                        onClick={() => {
+                                          if (window.confirm("Reset logged time for this task to zero?")) {
+                                            setElapsedTimes(prev => ({ ...prev, [task.id]: 0 }));
+                                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, timeLoggedSeconds: 0, timeLogged: 0, updatedAt: new Date().toISOString() } : t));
+                                            toast.success("Tracked time reset to zero!");
+                                          }
+                                        }}
+                                      >
+                                        <RotateCcw className="w-2.5 h-2.5" />
+                                        Reset
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-6 max-w-sm mt-3">
@@ -6191,6 +6210,28 @@ export function TaskEngine({
                                 )}>
                                   Limit: {formatHoursMinutes(task.timeEstimate)}
                                 </span>
+                              )}
+                              {(elapsedTimes[task.id] || 0) > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 text-zinc-400 hover:text-rose-600 transition-all cursor-pointer"
+                                  title="Reset tracked time to zero"
+                                  onClick={() => {
+                                    if (window.confirm("Are you sure you want to reset the tracked time for this task to zero?")) {
+                                      setElapsedTimes(prev => ({ ...prev, [task.id]: 0 }));
+                                      setTasks(prev => prev.map(t => t.id === task.id ? { 
+                                        ...t, 
+                                        timeLoggedSeconds: 0, 
+                                        timeLogged: 0, 
+                                        updatedAt: new Date().toISOString() 
+                                      } : t));
+                                      toast.success("Tracked time reset to zero!");
+                                    }
+                                  }}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
                               )}
                             </div>
                           </div>

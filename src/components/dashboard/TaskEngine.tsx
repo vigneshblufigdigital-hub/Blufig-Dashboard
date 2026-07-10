@@ -5808,7 +5808,7 @@ export function TaskEngine({
 
       {/* Task Details Dialog Modal */}
       <Dialog open={!!selectedDetailTask} onOpenChange={(open) => !open && setSelectedDetailTask(null)}>
-        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl p-6 bg-white dark:bg-zinc-950">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl p-6 bg-white dark:bg-zinc-950">
           {(() => {
             if (!selectedDetailTask) return null;
             const task = tasks.find(t => t.id === selectedDetailTask.id);

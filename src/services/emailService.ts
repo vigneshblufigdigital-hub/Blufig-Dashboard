@@ -31,6 +31,15 @@ export const emailService = {
    * Sends a task assignment email (using our server-side SMTP email route).
    */
   sendTaskAssignmentEmail: async (assignee: UserProfile, task: Task, creator: UserProfile) => {
+    if (!assignee || !assignee.email) {
+      console.warn('[EMAIL CLIENT] Cannot send task assignment email: assignee or assignee email is missing.');
+      toast.warning('Task assigned, but email alert skipped', {
+        description: 'The assigned user does not have a valid email address configured.',
+        duration: 4000,
+      });
+      return false;
+    }
+
     // 1. Log locally
     console.log(`[EMAIL CLIENT] Dispatching task assignment email request to server for assignee: ${assignee.email}`);
 
@@ -95,6 +104,15 @@ export const emailService = {
    * Sends a workflow stage handoff email.
    */
   sendWorkflowHandoffEmail: async (assignee: UserProfile, task: Task, previousAssignee: UserProfile, stepName: string) => {
+    if (!assignee || !assignee.email) {
+      console.warn('[EMAIL CLIENT] Cannot send workflow handoff email: assignee or assignee email is missing.');
+      toast.warning('Pipeline advanced, but notification skipped', {
+        description: 'The next stage assignee does not have a valid email address configured.',
+        duration: 4000,
+      });
+      return false;
+    }
+
     console.log(`[EMAIL CLIENT] Dispatching workflow handoff email request to server for assignee: ${assignee.email}`);
 
     let useCompatibilityEmails = false;

@@ -618,28 +618,34 @@ Guidelines:
         });
 
         try {
-          console.log(`[EMAIL SYSTEM] Attempting first send with sender: "${smtpSenderName}" <${smtpFrom}>`);
+          const recipientEmail = assignee.email.trim().toLowerCase();
+          console.log(`[EMAIL SYSTEM] Attempting first send with sender: "${smtpSenderName}" <${smtpFrom}> to: ${recipientEmail}`);
           await transporter.sendMail({
             from: `"${smtpSenderName}" <${smtpFrom}>`,
-            to: assignee.email,
+            to: recipientEmail,
+            replyTo: smtpFrom || smtpUser,
+            sender: smtpUser,
             subject: subject,
             text: textContent,
             html: htmlContent,
           });
-          console.log(`[EMAIL SYSTEM] Real email delivered successfully on first attempt to ${assignee.email}`);
+          console.log(`[EMAIL SYSTEM] Real email delivered successfully on first attempt to ${recipientEmail}`);
         } catch (firstError: any) {
           console.log(`[EMAIL SYSTEM] SMTP gateway response during first attempt: ${softenLog(firstError.message)}`);
           if (smtpFrom !== smtpUser && smtpUser && smtpUser.includes("@")) {
             try {
+              const recipientEmail = assignee.email.trim().toLowerCase();
               console.log(`[EMAIL SYSTEM] Retrying automatically with authenticated SMTP_USER (${smtpUser}) as the sender...`);
               await transporter.sendMail({
                 from: `"${smtpSenderName}" <${smtpUser}>`,
-                to: assignee.email,
+                to: recipientEmail,
+                replyTo: smtpUser,
+                sender: smtpUser,
                 subject: subject,
                 text: textContent,
                 html: htmlContent,
               });
-              console.log(`[EMAIL SYSTEM] Real email delivered successfully on retry to ${assignee.email}`);
+              console.log(`[EMAIL SYSTEM] Real email delivered successfully on retry to ${recipientEmail}`);
             } catch (retryError: any) {
               console.log(`[EMAIL SYSTEM] SMTP gateway response during retry: ${softenLog(retryError.message)}`);
               deliveryError = retryError.message;
@@ -830,27 +836,33 @@ Guidelines:
         });
 
         try {
+          const recipientEmail = email.trim().toLowerCase();
           await transporter.sendMail({
             from: `"${smtpSenderName}" <${smtpFrom}>`,
-            to: email,
+            to: recipientEmail,
+            replyTo: smtpFrom || smtpUser,
+            sender: smtpUser,
             subject: subject,
             text: textContent,
             html: htmlContent,
           });
-          console.log(`[EMAIL SYSTEM] Password reset email delivered successfully to ${email}`);
+          console.log(`[EMAIL SYSTEM] Password reset email delivered successfully to ${recipientEmail}`);
         } catch (firstError: any) {
           console.log(`[EMAIL SYSTEM] SMTP gateway response during password reset first attempt: ${softenLog(firstError.message)}`);
           if (smtpFrom !== smtpUser && smtpUser && smtpUser.includes("@")) {
             try {
+              const recipientEmail = email.trim().toLowerCase();
               console.log(`[EMAIL SYSTEM] Retrying reset email with SMTP_USER as sender...`);
               await transporter.sendMail({
                 from: `"${smtpSenderName}" <${smtpUser}>`,
-                to: email,
+                to: recipientEmail,
+                replyTo: smtpUser,
+                sender: smtpUser,
                 subject: subject,
                 text: textContent,
                 html: htmlContent,
               });
-              console.log(`[EMAIL SYSTEM] Password reset email delivered successfully on retry to ${email}`);
+              console.log(`[EMAIL SYSTEM] Password reset email delivered successfully on retry to ${recipientEmail}`);
             } catch (retryError: any) {
               console.log(`[EMAIL SYSTEM] SMTP gateway response during password reset retry: ${softenLog(retryError.message)}`);
               deliveryError = retryError.message;

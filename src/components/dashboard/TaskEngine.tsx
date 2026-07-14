@@ -2607,7 +2607,7 @@ export function TaskEngine({
           </div>
         )}
 
-        <div className="flex items-center space-x-3 self-end sm:self-auto shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-start sm:justify-end w-full sm:w-auto">
           {/* Scope Filter Switcher */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200/60 dark:border-zinc-800">
             <Button 

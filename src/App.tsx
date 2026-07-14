@@ -47,6 +47,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { UserProfileView } from './components/dashboard/UserProfileView';
 import { CalendarView } from './components/dashboard/CalendarView';
 import { TemplateEditor } from './components/dashboard/TemplateEditor';
+import { SMTPDiagnostics } from './components/dashboard/SMTPDiagnostics';
 import { getTemplates } from './utils/templateStorage';
 import { 
   Dialog, 
@@ -1693,6 +1694,8 @@ function Dashboard() {
             onOpenRoleSwitcher={() => setShowRoleSwitcher(true)}
           />
         );
+      case 'smtp':
+        return <SMTPDiagnostics />;
       case 'admin':
         return isAdmin ? (
           <div className="space-y-6">

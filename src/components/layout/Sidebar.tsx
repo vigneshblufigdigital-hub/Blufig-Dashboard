@@ -10,7 +10,8 @@ import {
   Package,
   Layers,
   MessageSquare,
-  Calendar
+  Calendar,
+  Server
 } from 'lucide-react';
 import { UserRole, ADMIN_ROLES, UserProfile, isSuperAdmin, hasPermission } from '../../types';
 import { cn } from '@/lib/utils';
@@ -34,11 +35,15 @@ const NAV_ITEMS = [
   { id: 'billing', label: 'Invoices', icon: Package, roles: [...ADMIN_ROLES, UserRole.CLIENT] },
   { id: 'time', label: 'Time Tracking', icon: Clock, roles: Object.values(UserRole).filter(r => r !== UserRole.CLIENT) },
   { id: 'admin', label: 'Admin', icon: Settings, roles: ADMIN_ROLES },
+  { id: 'smtp', label: 'SMTP Gateway', icon: Server, roles: [] },
   { id: 'portal', label: 'Client Portal', icon: FileText, roles: [...ADMIN_ROLES, UserRole.CLIENT] },
 ];
 
 export function Sidebar({ activeTab, setActiveTab, userRole, user }: SidebarProps) {
   const filteredNavItems = NAV_ITEMS.filter(item => {
+    if (item.id === 'smtp') {
+      return isSuperAdmin(user);
+    }
     if (!user) return !userRole || item.roles.includes(userRole);
     if (isSuperAdmin(user)) return true;
 

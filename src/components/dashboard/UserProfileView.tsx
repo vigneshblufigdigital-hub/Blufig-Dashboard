@@ -42,7 +42,6 @@ import {
   DialogTitle, 
   DialogFooter 
 } from '@/components/ui/dialog';
-import { SMTPDiagnostics } from './SMTPDiagnostics';
 
 // Preset Avatars (Emoji Glyphs) for awesome UX
 const PRESET_AVATARS = [
@@ -75,7 +74,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
   const [profileAvatar, setProfileAvatar] = useState(user.avatarUrl || '👨‍💻');
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   const [workLocation, setWorkLocation] = useState<'In Office' | 'Work From Home' | 'Leave' | 'Appear Away'>(user.workLocation || 'In Office');
-  const [selectedFolder, setSelectedFolder] = useState<'profile' | 'preferences' | 'knowledge' | 'tree' | 'smtp'>('profile');
+  const [selectedFolder, setSelectedFolder] = useState<'profile' | 'preferences' | 'knowledge' | 'tree'>('profile');
   const [searchTermTree, setSearchTermTree] = useState('');
   
   // Selected tree node for detail popover / side drawer
@@ -307,19 +306,7 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
               </button>
             )}
 
-            {isSuperAdmin(user) && (
-              <button
-                onClick={() => setSelectedFolder('smtp')}
-                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors text-left cursor-pointer ${
-                  selectedFolder === 'smtp' 
-                    ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm' 
-                    : 'text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900 dark:text-zinc-400'
-                }`}
-              >
-                <Server className="w-4 h-4 shrink-0" />
-                <span>SMTP Gateway Settings</span>
-              </button>
-            )}
+
           </div>
         </Card>
         
@@ -975,17 +962,6 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
             </motion.div>
           )}
 
-          {/* SMTP DIAGNOSTICS TAB */}
-          {selectedFolder === 'smtp' && isSuperAdmin(user) && (
-            <motion.div
-              key="smtp"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              <SMTPDiagnostics />
-            </motion.div>
-          )}
         </AnimatePresence>
       </div>
 

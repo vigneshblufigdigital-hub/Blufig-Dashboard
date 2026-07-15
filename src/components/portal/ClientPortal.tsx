@@ -27,14 +27,19 @@ import {
   UserCheck,
   TrendingUp,
   Receipt,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserPlus,
+  Plus,
+  Trash2,
+  Globe,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '../../contexts/AuthContext';
 import { Input } from '@/components/ui/input';
-import { UserRole, Project, Task, ClientReport, ClientInvoice, UserProfile, TaskStatus, ADMIN_ROLES } from '@/src/types';
+import { UserRole, Project, Task, ClientReport, ClientInvoice, UserProfile, TaskStatus, ADMIN_ROLES, ProjectType, Department } from '@/src/types';
 import { ClientReports } from '../dashboard/ClientReports';
 import { ClientInvoices } from '../dashboard/ClientInvoices';
 import { 
@@ -45,6 +50,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
+import { toast } from 'sonner';
 
 interface ClientPortalProps {
   users: UserProfile[];
@@ -61,6 +67,8 @@ interface ClientPortalProps {
   activeTimerTaskId?: string | null;
   highlightedTaskId?: string | null;
   setHighlightedTaskId?: (id: string | null) => void;
+  onAddUser?: (newUser: UserProfile) => void;
+  onRemoveUser?: (userId: string) => void;
 }
 
 export function ClientPortal({ 
@@ -77,13 +85,89 @@ export function ClientPortal({
   formatTime,
   activeTimerTaskId,
   highlightedTaskId,
-  setHighlightedTaskId
+  setHighlightedTaskId,
+  onAddUser,
+  onRemoveUser
 }: ClientPortalProps) {
   const { user } = useAuth();
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [taskFilter, setTaskFilter] = useState<'all' | 'ongoing' | 'completed'>('all');
+
+  // Add/Delete client management states
+  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientGender, setNewClientGender] = useState<'male' | 'female'>('male');
+  const [initProjName, setInitProjName] = useState('');
+  const [initProjType, setInitProjType] = useState<ProjectType>(ProjectType.RETAINER);
+  const [initProjHours, setInitProjHours] = useState(10);
+  const [initProjWebsite, setInitProjWebsite] = useState('');
+
+  const [deletingClient, setDeletingClient] = useState<UserProfile | null>(null);
+
+  const handleCreateClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onAddUser) {
+      toast.error("User onboarding function not configured.");
+      return;
+    }
+    if (!newClientName.trim() || !newClientEmail.trim()) {
+      toast.error("Name and email are required.");
+      return;
+    }
+
+    const defaultAvatar = newClientGender === 'female' 
+      ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${newClientName.trim() || 'Emma'}`
+      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${newClientName.trim() || 'Oliver'}`;
+
+    const clientProjectsList = initProjName.trim() ? [{
+      name: initProjName.trim(),
+      type: initProjType,
+      timingHours: initProjHours,
+      websiteUrl: initProjWebsite.trim()
+    }] : [];
+
+    const clientToAdd: UserProfile = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newClientName.trim(),
+      email: newClientEmail.trim().toLowerCase(),
+      role: UserRole.CLIENT,
+      department: Department.MANAGEMENT,
+      designation: 'Client Partner',
+      skillTags: [],
+      avatarUrl: defaultAvatar,
+      gender: newClientGender,
+      status: 'active',
+      isActive: true,
+      clientProjects: clientProjectsList.length > 0 ? clientProjectsList : undefined
+    };
+
+    onAddUser(clientToAdd);
+    toast.success(`Onboarded Client Partner "${newClientName.trim()}" successfully!`);
+    
+    // Reset state
+    setNewClientName('');
+    setNewClientEmail('');
+    setNewClientGender('male');
+    setInitProjName('');
+    setInitProjType(ProjectType.RETAINER);
+    setInitProjHours(10);
+    setInitProjWebsite('');
+    setIsAddClientOpen(false);
+  };
+
+  const handleDeleteClient = () => {
+    if (!deletingClient) return;
+    if (!onRemoveUser) {
+      toast.error("User deletion function not configured.");
+      return;
+    }
+
+    onRemoveUser(deletingClient.id);
+    setDeletingClient(null);
+  };
 
   // Listen to highlightedTaskId prop to auto-switch tab to 'tasks' and scroll
   React.useEffect(() => {
@@ -162,9 +246,18 @@ export function ClientPortal({
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">Client Hub Directory</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 font-sans">Client Hub Directory</h2>
             <p className="text-zinc-500 text-sm">Select a Client Partner below to inspect, upload billing, or audit their live workspace.</p>
           </div>
+          {isAdmin && onAddUser && (
+            <Button
+              onClick={() => setIsAddClientOpen(true)}
+              className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 rounded-xl px-5 h-10 font-bold text-xs uppercase tracking-widest shadow-md flex items-center justify-center cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Onboard Client
+            </Button>
+          )}
         </div>
 
         <div className="relative">
@@ -181,9 +274,23 @@ export function ClientPortal({
           {clients.map(client => (
             <Card 
               key={client.id} 
-              className="border-zinc-200 hover:border-zinc-900 transition-all cursor-pointer group rounded-xl overflow-hidden shadow-sm hover:shadow-md"
+              className="border-zinc-200 hover:border-zinc-900 transition-all cursor-pointer group rounded-xl overflow-hidden shadow-sm hover:shadow-md relative"
               onClick={() => setSelectedClientId(client.id)}
             >
+              {/* Delete Button (Only for Admins) */}
+              {isAdmin && onRemoveUser && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent selecting the client
+                    setDeletingClient(client);
+                  }}
+                  className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all"
+                  title="Delete Client Profile"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-4">
                   <Avatar className="w-12 h-12 border-2 border-white shadow-sm ring-1 ring-zinc-100">
@@ -227,6 +334,223 @@ export function ClientPortal({
             </Card>
           ))}
         </div>
+
+        {/* Onboard Client Modal */}
+        <AnimatePresence>
+          {isAddClientOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Onboard Client Partner</h3>
+                      <p className="text-xs text-zinc-500">Add a new client profile & initialize their project workspace.</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsAddClientOpen(false)}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleCreateClient} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Client Identity</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Full Name</label>
+                        <Input 
+                          required
+                          placeholder="e.g. John Doe"
+                          value={newClientName}
+                          onChange={(e) => setNewClientName(e.target.value)}
+                          className="rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Primary Email</label>
+                        <Input 
+                          required
+                          type="email"
+                          placeholder="john@example.com"
+                          value={newClientEmail}
+                          onChange={(e) => setNewClientEmail(e.target.value)}
+                          className="rounded-xl"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Gender (For Initial Avatar)</label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center space-x-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                          <input 
+                            type="radio" 
+                            name="gender" 
+                            value="male" 
+                            checked={newClientGender === 'male'}
+                            onChange={() => setNewClientGender('male')}
+                            className="text-orange-500 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                          />
+                          <span>Male (Oliver seed)</span>
+                        </label>
+                        <label className="flex items-center space-x-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                          <input 
+                            type="radio" 
+                            name="gender" 
+                            value="female" 
+                            checked={newClientGender === 'female'}
+                            onChange={() => setNewClientGender('female')}
+                            className="text-orange-500 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                          />
+                          <span>Female (Emma seed)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-zinc-100 dark:border-zinc-900 my-4" />
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Managed Project (Optional)</h4>
+                      <span className="text-[10px] text-zinc-400 italic">Adds a workspace project instantly</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Project Name</label>
+                      <Input 
+                        placeholder="e.g. Acme Q3 Campaign"
+                        value={initProjName}
+                        onChange={(e) => setInitProjName(e.target.value)}
+                        className="rounded-xl"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Project Type</label>
+                        <select
+                          value={initProjType}
+                          onChange={(e) => setInitProjType(e.target.value as ProjectType)}
+                          className="w-full h-10 px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        >
+                          <option value={ProjectType.RETAINER}>Retainer</option>
+                          <option value={ProjectType.ONE_OFF}>One-Off Project</option>
+                          <option value={ProjectType.ALWAYS_ON}>Always-On</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Retainer Hours / Month</label>
+                        <Input 
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={initProjHours}
+                          onChange={(e) => setInitProjHours(parseInt(e.target.value) || 10)}
+                          className="rounded-xl font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Website URL (Optional)</label>
+                      <div className="relative">
+                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <Input 
+                          placeholder="e.g. acme.com"
+                          value={initProjWebsite}
+                          onChange={(e) => setInitProjWebsite(e.target.value)}
+                          className="pl-10 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end space-x-3 pt-4 border-t border-zinc-100 dark:border-zinc-900 mt-6">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsAddClientOpen(false)}
+                      className="rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      className="rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold"
+                    >
+                      Onboard Client Partner
+                    </Button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete Client Confirmation Modal */}
+        <AnimatePresence>
+          {deletingClient && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full overflow-hidden p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start space-x-4">
+                  <div className="p-3 bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-sans">Delete Client Partner?</h3>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                      Are you sure you want to delete <span className="font-bold text-zinc-900 dark:text-zinc-100">{deletingClient.name}</span>? 
+                    </p>
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                      This will permanently remove their user profile and all of their active projects, tasks, reports, and invoices. This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setDeletingClient(null)}
+                    className="rounded-xl"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleDeleteClient}
+                    className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                  >
+                    Permanently Delete Client
+                  </Button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

@@ -1589,7 +1589,18 @@ function Dashboard() {
   };
 
   const handleRemoveUser = (userId: string) => {
-    setUsers(users.filter(u => u.id !== userId));
+    const userToDelete = users.find(u => u.id === userId);
+    if (userToDelete && userToDelete.role === UserRole.CLIENT) {
+      const clientProjectIds = projects.filter(p => p.clientId === userId).map(p => p.id);
+      setProjects(prev => prev.filter(p => p.clientId !== userId));
+      setTasks(prev => prev.filter(t => !clientProjectIds.includes(t.projectId)));
+      setReports(prev => prev.filter(r => !clientProjectIds.includes(r.projectId)));
+      setInvoices(prev => prev.filter(i => !clientProjectIds.includes(i.projectId)));
+      toast.success(`Client "${userToDelete.name}" and all associated projects/tasks deleted.`);
+    } else if (userToDelete) {
+      toast.success(`User "${userToDelete.name}" deleted.`);
+    }
+    setUsers(prev => prev.filter(u => u.id !== userId));
   };
 
   const handleAddReport = (newReport: ClientReport) => {
@@ -1790,6 +1801,8 @@ function Dashboard() {
           activeTimerTaskId={activeTimerTaskId}
           highlightedTaskId={highlightedTaskId}
           setHighlightedTaskId={setHighlightedTaskId}
+          onAddUser={handleAddUser}
+          onRemoveUser={handleRemoveUser}
         />;
       default:
         return <Overview projects={projects} tasks={tasks} />;

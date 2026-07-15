@@ -303,27 +303,14 @@ export function TimeSheet({
   const totalRealSeconds = Object.entries(elapsedTimes || {})
     .filter(([id]) => !deletedLogIds.includes(id))
     .reduce((sum, [_, current]) => sum + current, 0);
-  const totalBaseHours = 124.5;
-  const liveTotalHours = (totalBaseHours + (totalRealSeconds / 3600)).toFixed(1);
+  const liveTotalHours = (totalRealSeconds / 3600).toFixed(1);
 
-  // Fallback default static logs if no tasks are manually logged yet
-  const staticLogs = [
-    { id: 'static-1', task: 'Monthly SEO Audit', project: 'Acme Corp Retainer', user: 'Rashmi Alurkar', date: '2026-06-15', durationSecs: 9000, billing: 'Billable' as 'Billable' | 'Non-Billable', isRunning: false },
-    { id: 'static-2', task: 'Google Ads Optimization', project: 'Paid Social Campaigns', user: 'Ajay Kulkarni', date: '2026-06-14', durationSecs: 4320, billing: 'Billable' as 'Billable' | 'Non-Billable', isRunning: false },
-    { id: 'static-3', task: 'Internal Strategy Sync', project: 'Strategy & Ops', user: 'Nishi Kant', date: '2026-06-12', durationSecs: 2880, billing: 'Non-Billable' as 'Billable' | 'Non-Billable', isRunning: false },
-  ];
+  // No static fallback logs to ensure we only display actual live tracking data
+  const staticLogs: any[] = [];
 
-  // Combine and apply overrides, mapping static log projects to real project IDs where possible
+  // Combine and apply overrides
   const displayedLogs = [
-    ...realLogs,
-    ...staticLogs.filter(s => !realLogs.some(r => r.task === s.task)).map(s => {
-      const matchedProj = projects.find(p => p.name.toLowerCase().includes(s.project.toLowerCase()) || s.project.toLowerCase().includes(p.name.toLowerCase()));
-      return {
-        ...s,
-        projectId: matchedProj ? matchedProj.id : 'static-proj',
-        isReal: false
-      };
-    })
+    ...realLogs
   ].filter(log => !deletedLogIds.includes(log.id))
    .map(log => {
     let updatedLog = { ...log };
@@ -335,6 +322,19 @@ export function TimeSheet({
     }
     return updatedLog;
   });
+
+  // Calculate dynamic stats
+  const totalSecsForStats = displayedLogs.reduce((sum, log) => sum + (log.durationSecs || 0), 0);
+  const billableSecsForStats = displayedLogs
+    .filter(log => log.billing === 'Billable')
+    .reduce((sum, log) => sum + (log.durationSecs || 0), 0);
+  const liveBillableRatio = totalSecsForStats > 0 ? Math.round((billableSecsForStats / totalSecsForStats) * 100) : 0;
+
+  const uniqueDates = Array.from(new Set(displayedLogs.map(log => log.date))).filter(Boolean);
+  const liveAvgDailyHours = uniqueDates.length > 0 ? ((totalSecsForStats / uniqueDates.length) / 3600).toFixed(1) : '0.0';
+
+  const doneTasksCount = tasks.filter(t => t.status === 'Done').length;
+  const liveProductivity = tasks.length > 0 ? Math.round((doneTasksCount / tasks.length) * 100) : 100;
 
   // Filter logs based on selected project for analysis
   const filteredLogs = selectedAnalyzeProjectId === 'all'
@@ -538,10 +538,10 @@ export function TimeSheet({
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Logged" value={`${liveTotalHours}h`} trend="+12%" icon={Clock} />
-        <StatCard title="Billable Ratio" value="88%" trend="+2%" icon={ArrowUpRight} />
-        <StatCard title="Avg Daily" value="6.2h" trend="-0.5%" icon={Calendar} />
-        <StatCard title="Productivity" value="94%" trend="+4%" icon={BarChart3} />
+        <StatCard title="Total Logged" value={`${liveTotalHours}h`} trend={totalSecsForStats > 0 ? "+100%" : "0%"} icon={Clock} />
+        <StatCard title="Billable Ratio" value={`${liveBillableRatio}%`} trend={liveBillableRatio > 0 ? "+100%" : "0%"} icon={ArrowUpRight} />
+        <StatCard title="Avg Daily" value={`${liveAvgDailyHours}h`} trend={liveAvgDailyHours !== '0.0' ? "+100%" : "0%"} icon={Calendar} />
+        <StatCard title="Productivity" value={`${liveProductivity}%`} trend={liveProductivity > 0 ? "+100%" : "0%"} icon={BarChart3} />
       </div>
 
       {/* Project Time Analyzer Dropdown & Dashboard Card */}

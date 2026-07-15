@@ -279,62 +279,46 @@ function Dashboard() {
   React.useEffect(() => {
     const unsubUsers = syncCollection<UserProfile>('users', (data) => {
       hasLoadedRef.current.users = true;
-      if (data.length > 0) {
-        lastSyncedDataRef.current.users = JSON.stringify(data);
-        isSyncingRef.current.users = true;
-        setUsers(data);
-      }
+      lastSyncedDataRef.current.users = JSON.stringify(data);
+      isSyncingRef.current.users = true;
+      setUsers(data);
     });
 
     const unsubProjects = syncCollection<Project>('projects', (data) => {
       hasLoadedRef.current.projects = true;
-      if (data.length > 0) {
-        lastSyncedDataRef.current.projects = JSON.stringify(data);
-        isSyncingRef.current.projects = true;
-        setProjects(data);
-      }
+      lastSyncedDataRef.current.projects = JSON.stringify(data);
+      isSyncingRef.current.projects = true;
+      setProjects(data);
     });
 
     const unsubTasks = syncCollection<Task>('tasks', (data) => {
       hasLoadedRef.current.tasks = true;
-      if (data.length > 0) {
-        lastSyncedDataRef.current.tasks = JSON.stringify(data);
-        isSyncingRef.current.tasks = true;
-        setTasks(data);
-      }
+      lastSyncedDataRef.current.tasks = JSON.stringify(data);
+      isSyncingRef.current.tasks = true;
+      setTasks(data);
     });
 
     const unsubReports = syncCollection<ClientReport>('reports', (data) => {
       hasLoadedRef.current.reports = true;
       const filtered = data.filter(r => r.id !== 'rep-1' && r.id !== 'rep-2');
       lastSyncedDataRef.current.reports = JSON.stringify(filtered);
-      if (data.length > 0) {
-        isSyncingRef.current.reports = true;
-        setReports(filtered);
-      } else {
-        setReports([]);
-      }
+      isSyncingRef.current.reports = true;
+      setReports(filtered);
     });
 
     const unsubInvoices = syncCollection<ClientInvoice>('invoices', (data) => {
       hasLoadedRef.current.invoices = true;
       const filtered = data.filter(i => i.id !== 'inv-1' && i.id !== 'inv-2');
       lastSyncedDataRef.current.invoices = JSON.stringify(filtered);
-      if (data.length > 0) {
-        isSyncingRef.current.invoices = true;
-        setInvoices(filtered);
-      } else {
-        setInvoices([]);
-      }
+      isSyncingRef.current.invoices = true;
+      setInvoices(filtered);
     });
 
     const unsubNotifs = syncCollection<NotificationItem>('notifications', (data) => {
       hasLoadedRef.current.notifications = true;
       lastSyncedDataRef.current.notifications = JSON.stringify(data);
-      if (data.length > 0) {
-        isSyncingRef.current.notifications = true;
-        setNotifications(data);
-      }
+      isSyncingRef.current.notifications = true;
+      setNotifications(data);
     });
 
     return () => {
@@ -1094,7 +1078,12 @@ function Dashboard() {
       return;
     }
 
-    const projectId = 'p' + (projects.length + 1);
+    let nextNum = projects.length + 1;
+    let projectId = 'p' + nextNum;
+    while (projects.some(p => p.id === projectId)) {
+      nextNum++;
+      projectId = 'p' + nextNum;
+    }
     const resolvedWebsite = newProjectWebsite.trim() 
       ? (newProjectWebsite.startsWith('http://') || newProjectWebsite.startsWith('https://') ? newProjectWebsite.trim() : `https://${newProjectWebsite.trim()}`)
       : `https://${newProjectName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'project'}.com`;
@@ -1480,8 +1469,14 @@ function Dashboard() {
         }
       );
     } else {
+      let nextTaskNum = tasks.length + 1;
+      let newTaskId = 't' + nextTaskNum;
+      while (tasks.some(t => t.id === newTaskId)) {
+        nextTaskNum++;
+        newTaskId = 't' + nextTaskNum;
+      }
       generatedTasks.push({
-        id: 't' + (tasks.length + 1),
+        id: newTaskId,
         projectId: projectId,
         deliverableId: 'd-initial',
         name: 'Initial Project Brief & Strategy',
@@ -1496,8 +1491,8 @@ function Dashboard() {
       });
     }
 
-    setProjects([...projects, newProject]);
-    setTasks([...tasks, ...generatedTasks]);
+    setProjects(prev => [...prev, newProject]);
+    setTasks(prev => [...prev, ...generatedTasks]);
     
     setIsCreateDialogOpen(false);
     setAiSuggestion(null);
@@ -1512,7 +1507,7 @@ function Dashboard() {
   };
 
   const handleAddUser = (newUser: UserProfile) => {
-    setUsers([...users, newUser]);
+    setUsers(prev => [...prev, newUser]);
     
     if (newUser.role === UserRole.CLIENT) {
       if (newUser.clientProjects && newUser.clientProjects.length > 0) {
@@ -1520,7 +1515,12 @@ function Dashboard() {
         const newTasksList: Task[] = [];
         
         newUser.clientProjects.forEach((proj, index) => {
-          const projectId = 'p' + (projects.length + 1 + index);
+          let nextProjNum = projects.length + 1 + index;
+          let projectId = 'p' + nextProjNum;
+          while (projects.some(p => p.id === projectId) || newProjectsList.some(p => p.id === projectId)) {
+            nextProjNum++;
+            projectId = 'p' + nextProjNum;
+          }
           const projectName = proj.name.trim() || `${newUser.name.trim()}'s Project ${index + 1}`;
           const resolvedWebsite = proj.websiteUrl.trim() 
             ? (proj.websiteUrl.startsWith('http://') || proj.websiteUrl.startsWith('https://') ? proj.websiteUrl.trim() : `https://${proj.websiteUrl.trim()}`)
@@ -1539,8 +1539,14 @@ function Dashboard() {
             timingHours: proj.timingHours || 10
           };
 
+          let nextTaskNum = tasks.length + 1 + index;
+          let taskId = 't' + nextTaskNum;
+          while (tasks.some(t => t.id === taskId) || newTasksList.some(t => t.id === taskId)) {
+            nextTaskNum++;
+            taskId = 't' + nextTaskNum;
+          }
           const newTask: Task = {
-            id: 't' + (tasks.length + 1 + index),
+            id: taskId,
             projectId: projectId,
             deliverableId: 'd-initial-' + index,
             name: `Onboarding & Kickoff Briefing for ${projectName}`,
@@ -1562,7 +1568,12 @@ function Dashboard() {
         setTasks(prev => [...prev, ...newTasksList]);
         toast.success(`Created ${newProjectsList.length} custom project(s) for Client: ${newUser.name}!`);
       } else {
-        const projectId = 'p' + (projects.length + 1);
+        let nextProjNum = projects.length + 1;
+        let projectId = 'p' + nextProjNum;
+        while (projects.some(p => p.id === projectId)) {
+          nextProjNum++;
+          projectId = 'p' + nextProjNum;
+        }
         const projectName = `${newUser.name.trim()}'s Project`;
         
         const newProject: Project = {
@@ -1578,8 +1589,14 @@ function Dashboard() {
           timingHours: 10
         };
 
+        let nextTaskNum = tasks.length + 1;
+        let taskId = 't' + nextTaskNum;
+        while (tasks.some(t => t.id === taskId)) {
+          nextTaskNum++;
+          taskId = 't' + nextTaskNum;
+        }
         const newTask: Task = {
-          id: 't' + (tasks.length + 1),
+          id: taskId,
           projectId: projectId,
           deliverableId: 'd-initial',
           name: `Onboarding & Kickoff Briefing for ${newUser.name}`,
@@ -1617,19 +1634,19 @@ function Dashboard() {
   };
 
   const handleAddReport = (newReport: ClientReport) => {
-    setReports([newReport, ...reports]);
+    setReports(prev => [newReport, ...prev]);
   };
 
   const handleRemoveReport = (reportId: string) => {
-    setReports(reports.filter(r => r.id !== reportId));
+    setReports(prev => prev.filter(r => r.id !== reportId));
   };
 
   const handleAddInvoice = (newInvoice: ClientInvoice) => {
-    setInvoices([newInvoice, ...invoices]);
+    setInvoices(prev => [newInvoice, ...prev]);
   };
 
   const handleRemoveInvoice = (invoiceId: string) => {
-    setInvoices(invoices.filter(i => i.id !== invoiceId));
+    setInvoices(prev => prev.filter(i => i.id !== invoiceId));
   };
 
   const renderContent = () => {

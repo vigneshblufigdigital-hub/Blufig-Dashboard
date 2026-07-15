@@ -71,6 +71,9 @@ interface ClientPortalProps {
   onRemoveUser?: (userId: string) => void;
 }
 
+const DEFAULT_MALE_AVATAR = "https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver";
+const DEFAULT_FEMALE_AVATAR = "https://api.dicebear.com/7.x/adventurer/svg?seed=Emma";
+
 export function ClientPortal({ 
   users, 
   tasks, 
@@ -119,8 +122,8 @@ export function ClientPortal({
     }
 
     const defaultAvatar = newClientGender === 'female' 
-      ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${newClientName.trim() || 'Emma'}`
-      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${newClientName.trim() || 'Oliver'}`;
+      ? DEFAULT_FEMALE_AVATAR
+      : DEFAULT_MALE_AVATAR;
 
     const clientProjectsList = initProjName.trim() ? [{
       name: initProjName.trim(),
@@ -395,30 +398,36 @@ export function ClientPortal({
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Gender (For Initial Avatar)</label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center space-x-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className={`flex items-center space-x-3 p-2 rounded-xl border cursor-pointer transition-all ${
+                          newClientGender === 'male' ? 'border-blue-500 bg-blue-50/10' : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800'
+                        }`}>
                           <input 
                             type="radio" 
                             name="gender" 
                             value="male" 
                             checked={newClientGender === 'male'}
                             onChange={() => setNewClientGender('male')}
-                            className="text-orange-500 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                            className="text-blue-500 focus:ring-blue-500 border-zinc-300 cursor-pointer"
                           />
-                          <span>Male (Oliver seed)</span>
+                          <img src={DEFAULT_MALE_AVATAR} className="w-7 h-7 rounded-full object-cover border" alt="Male" />
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Dummy Men Pic</span>
                         </label>
-                        <label className="flex items-center space-x-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                        <label className={`flex items-center space-x-3 p-2 rounded-xl border cursor-pointer transition-all ${
+                          newClientGender === 'female' ? 'border-pink-500 bg-pink-50/10' : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800'
+                        }`}>
                           <input 
                             type="radio" 
                             name="gender" 
                             value="female" 
                             checked={newClientGender === 'female'}
                             onChange={() => setNewClientGender('female')}
-                            className="text-orange-500 focus:ring-orange-500 border-zinc-300 cursor-pointer"
+                            className="text-pink-500 focus:ring-pink-500 border-zinc-300 cursor-pointer"
                           />
-                          <span>Female (Emma seed)</span>
+                          <img src={DEFAULT_FEMALE_AVATAR} className="w-7 h-7 rounded-full object-cover border" alt="Female" />
+                          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Dummy Women Pic</span>
                         </label>
                       </div>
                     </div>

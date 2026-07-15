@@ -55,6 +55,9 @@ interface UserManagementProps {
   currentUser?: UserProfile | null;
 }
 
+const DEFAULT_MALE_AVATAR = "https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver";
+const DEFAULT_FEMALE_AVATAR = "https://api.dicebear.com/7.x/adventurer/svg?seed=Emma";
+
 export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, currentUser }: UserManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -69,7 +72,7 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
     department: Department.DESIGN,
     status: 'active',
     gender: 'male',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver',
+    avatarUrl: DEFAULT_MALE_AVATAR,
     isSuperAdmin: false,
     permissions: {
       canCreateProject: false,
@@ -137,8 +140,8 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
     if (!editingUser || !editName || !editEmail) return;
 
     const defaultAvatar = editGender === 'female' 
-      ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${editName || 'Emma'}`
-      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${editName || 'Oliver'}`;
+      ? DEFAULT_FEMALE_AVATAR
+      : DEFAULT_MALE_AVATAR;
 
     const updatedUser: UserProfile = {
       ...editingUser,
@@ -167,8 +170,8 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
     if (!newUser.name || !newUser.email) return;
 
     const defaultAvatar = newUser.gender === 'female' 
-      ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${newUser.name || 'Emma'}`
-      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${newUser.name || 'Oliver'}`;
+      ? DEFAULT_FEMALE_AVATAR
+      : DEFAULT_MALE_AVATAR;
 
     const userToAdd: UserProfile = {
       ...newUser as UserProfile,
@@ -191,7 +194,7 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
       department: Department.DESIGN,
       status: 'active',
       gender: 'male',
-      avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Oliver',
+      avatarUrl: DEFAULT_MALE_AVATAR,
       isSuperAdmin: false,
       permissions: {
         canCreateProject: false,
@@ -367,11 +370,10 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                   <button
                     type="button"
                     onClick={() => {
-                      const updatedName = newUser.name || 'Oliver';
                       setNewUser({
                         ...newUser,
                         gender: 'male',
-                        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${updatedName}`
+                        avatarUrl: DEFAULT_MALE_AVATAR
                       });
                     }}
                     className={cn(
@@ -387,11 +389,10 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                   <button
                     type="button"
                     onClick={() => {
-                      const updatedName = newUser.name || 'Emma';
                       setNewUser({
                         ...newUser,
                         gender: 'female',
-                        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${updatedName}`
+                        avatarUrl: DEFAULT_FEMALE_AVATAR
                       });
                     }}
                     className={cn(
@@ -412,13 +413,19 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                 <div className="flex items-center justify-between">
                   <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Profile Photo / Logo</Label>
                   {newUser.avatarUrl && (
-                    <span className="text-[10px] text-zinc-400 font-bold">Selected: {newUser.avatarUrl.length > 5 ? 'Custom Logo' : newUser.avatarUrl}</span>
+                    <span className="text-[10px] text-zinc-400 font-bold">Selected: {newUser.avatarUrl.length > 30 ? 'Custom Photo' : newUser.avatarUrl}</span>
                   )}
                 </div>
                 
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border flex items-center justify-center text-2xl shadow-inner font-mono select-none">
-                    {newUser.avatarUrl && newUser.avatarUrl.length <= 4 ? newUser.avatarUrl : (newUser.avatarUrl ? '🖼️' : '👤')}
+                  <div className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-800 border flex items-center justify-center text-2xl shadow-inner font-mono select-none overflow-hidden shrink-0">
+                    {newUser.avatarUrl && (newUser.avatarUrl.startsWith('http') || newUser.avatarUrl.startsWith('/') || newUser.avatarUrl.startsWith('data:')) ? (
+                      <img src={newUser.avatarUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : newUser.avatarUrl && newUser.avatarUrl.length <= 4 ? (
+                      newUser.avatarUrl
+                    ) : (
+                      '👤'
+                    )}
                   </div>
                   <div className="flex-1">
                     <Input 
@@ -427,6 +434,34 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                       value={newUser.avatarUrl}
                       onChange={(e) => setNewUser({...newUser, avatarUrl: e.target.value})}
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[9px] uppercase font-extrabold tracking-widest text-zinc-400 block">Dummy Gender Avatars</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewUser({...newUser, avatarUrl: DEFAULT_MALE_AVATAR, gender: 'male'})}
+                      className={cn(
+                        "flex items-center space-x-2 p-1.5 rounded-lg border transition-all cursor-pointer text-left bg-white dark:bg-zinc-950",
+                        newUser.avatarUrl === DEFAULT_MALE_AVATAR ? "border-blue-500 bg-blue-50/10" : "border-zinc-200 hover:bg-zinc-50"
+                      )}
+                    >
+                      <img src={DEFAULT_MALE_AVATAR} className="w-8 h-8 rounded-full object-cover border" alt="Male" />
+                      <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">Dummy Men</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewUser({...newUser, avatarUrl: DEFAULT_FEMALE_AVATAR, gender: 'female'})}
+                      className={cn(
+                        "flex items-center space-x-2 p-1.5 rounded-lg border transition-all cursor-pointer text-left bg-white dark:bg-zinc-950",
+                        newUser.avatarUrl === DEFAULT_FEMALE_AVATAR ? "border-pink-500 bg-pink-50/10" : "border-zinc-200 hover:bg-zinc-50"
+                      )}
+                    >
+                      <img src={DEFAULT_FEMALE_AVATAR} className="w-8 h-8 rounded-full object-cover border" alt="Female" />
+                      <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">Dummy Women</span>
+                    </button>
                   </div>
                 </div>
 
@@ -932,10 +967,9 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                     value={editGender} 
                     onValueChange={(v: 'male' | 'female') => {
                       setEditGender(v);
-                      // Auto-update to correct gender avatar if it is currently using default seeds
-                      if (!editAvatarUrl || editAvatarUrl.includes('dicebear.com/7.x/avataaars/svg?seed=')) {
-                        const newSeed = editName || (v === 'female' ? 'Emma' : 'Oliver');
-                        setEditAvatarUrl(`https://api.dicebear.com/7.x/avataaars/svg?seed=${newSeed}`);
+                      // Auto-update to correct gender avatar if it is currently using default or empty
+                      if (!editAvatarUrl || editAvatarUrl.includes('dicebear.com') || editAvatarUrl === DEFAULT_MALE_AVATAR || editAvatarUrl === DEFAULT_FEMALE_AVATAR) {
+                        setEditAvatarUrl(v === 'female' ? DEFAULT_FEMALE_AVATAR : DEFAULT_MALE_AVATAR);
                       }
                     }}
                   >
@@ -1058,6 +1092,40 @@ export function UserManagement({ users, onAddUser, onRemoveUser, onUpdateUsers, 
                         }}
                       />
                     </label>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[8px] uppercase font-extrabold tracking-widest text-zinc-400 block">Dummy Gender Avatars</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditAvatarUrl(DEFAULT_MALE_AVATAR);
+                        setEditGender('male');
+                      }}
+                      className={cn(
+                        "flex items-center space-x-2 p-1.5 rounded-lg border transition-all cursor-pointer text-left bg-white dark:bg-zinc-950",
+                        editAvatarUrl === DEFAULT_MALE_AVATAR ? "border-blue-500 bg-blue-50/10 dark:bg-blue-950/20" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800"
+                      )}
+                    >
+                      <img src={DEFAULT_MALE_AVATAR} className="w-8 h-8 rounded-full object-cover border" alt="Male" />
+                      <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">Dummy Men</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditAvatarUrl(DEFAULT_FEMALE_AVATAR);
+                        setEditGender('female');
+                      }}
+                      className={cn(
+                        "flex items-center space-x-2 p-1.5 rounded-lg border transition-all cursor-pointer text-left bg-white dark:bg-zinc-950",
+                        editAvatarUrl === DEFAULT_FEMALE_AVATAR ? "border-pink-500 bg-pink-50/10 dark:bg-pink-950/20" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800"
+                      )}
+                    >
+                      <img src={DEFAULT_FEMALE_AVATAR} className="w-8 h-8 rounded-full object-cover border" alt="Female" />
+                      <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400">Dummy Women</span>
+                    </button>
                   </div>
                 </div>
 

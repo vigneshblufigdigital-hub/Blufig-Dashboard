@@ -424,7 +424,43 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                     </div>
                   </div>
 
-
+                  <div className="space-y-2 pt-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block pb-1">
+                      Or Choose Modern Default Picture
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomAvatarUrl('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80');
+                          setProfileAvatar('👨‍💻');
+                        }}
+                        className={`p-2.5 rounded-xl border flex items-center space-x-3 transition-all cursor-pointer ${
+                          customAvatarUrl === 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80'
+                            ? 'border-brand-secondary bg-orange-500/10 shadow-sm'
+                            : 'border-zinc-200 hover:bg-zinc-50 bg-white dark:bg-zinc-950 dark:border-zinc-800'
+                        }`}
+                      >
+                        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80" className="w-10 h-10 rounded-full object-cover border" alt="Male" />
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Default Men Pic</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomAvatarUrl('https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80');
+                          setProfileAvatar('👩‍💻');
+                        }}
+                        className={`p-2.5 rounded-xl border flex items-center space-x-3 transition-all cursor-pointer ${
+                          customAvatarUrl === 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80'
+                            ? 'border-brand-secondary bg-orange-500/10 shadow-sm'
+                            : 'border-zinc-200 hover:bg-zinc-50 bg-white dark:bg-zinc-950 dark:border-zinc-800'
+                        }`}
+                      >
+                        <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80" className="w-10 h-10 rounded-full object-cover border" alt="Female" />
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Default Women Pic</span>
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="space-y-3 pt-2">
                     <Label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">

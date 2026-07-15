@@ -23,7 +23,9 @@ import {
   Settings,
   Briefcase,
   Folder,
-  Mail
+  Mail,
+  Edit,
+  FileEdit
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'motion/react';
@@ -91,8 +93,20 @@ function Dashboard() {
   const [selectedAMId, setSelectedAMId] = useState<string>('072'); // Default to Amit
   const [newProjectClientId, setNewProjectClientId] = useState<string>('client-1'); // Default to Sarah Johnson
   const [newProjectCoordinator, setNewProjectCoordinator] = useState('');
-  const [newProjectTemplate, setNewProjectTemplate] = useState('none');
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [templatesList, setTemplatesList] = useState<TeamTemplate[]>([]);
+
+  // Project Edit Dialog States
+  const [isEditProjectDialogOpen, setIsEditProjectDialogOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectWebsite, setEditProjectWebsite] = useState('');
+  const [editProjectType, setEditProjectType] = useState('Retainer');
+  const [editProjectAMId, setEditProjectAMId] = useState('');
+  const [editProjectClientId, setEditProjectClientId] = useState('');
+  const [editProjectCoordinator, setEditProjectCoordinator] = useState('');
+  const [editProjectStatus, setEditProjectStatus] = useState<'Active' | 'On Hold' | 'Completed' | 'In Review' | 'Client Review' | 'Pending'>('Active');
+  const [editProjectSelectedTemplateIds, setEditProjectSelectedTemplateIds] = useState<string[]>([]);
 
   useEffect(() => {
     setTemplatesList(getTemplates());
@@ -1040,6 +1054,91 @@ function Dashboard() {
     setIsCreateDialogOpen(true);
   };
 
+  const handleOpenEditProject = (project: Project) => {
+    setEditingProject(project);
+    setEditProjectName(project.name);
+    setEditProjectWebsite(project.websiteUrl || '');
+    setEditProjectType(project.type);
+    setEditProjectAMId(project.accountManagerId || '');
+    setEditProjectClientId(project.clientId || '');
+    setEditProjectCoordinator(project.clientCoordinator || '');
+    setEditProjectStatus(project.status || 'Active');
+    setEditProjectSelectedTemplateIds([]);
+    setIsEditProjectDialogOpen(true);
+  };
+
+  const handleSaveProjectEdit = () => {
+    if (!editingProject) return;
+    if (!editProjectName.trim()) {
+      toast.error("Project name cannot be empty.");
+      return;
+    }
+
+    const resolvedWebsite = editProjectWebsite.trim()
+      ? (editProjectWebsite.startsWith('http://') || editProjectWebsite.startsWith('https://') ? editProjectWebsite.trim() : `https://${editProjectWebsite.trim()}`)
+      : '';
+
+    setProjects(prev => prev.map(p => p.id === editingProject.id ? {
+      ...p,
+      name: editProjectName.trim(),
+      websiteUrl: resolvedWebsite,
+      type: editProjectType as ProjectType,
+      accountManagerId: editProjectAMId,
+      clientId: editProjectClientId,
+      clientCoordinator: editProjectCoordinator.trim() || undefined,
+      status: editProjectStatus
+    } : p));
+
+    // If some templates are selected to append tasks
+    if (editProjectSelectedTemplateIds.length > 0) {
+      const templates = getTemplates();
+      const generatedTasks: Task[] = [];
+      let taskCounter = 0;
+      
+      editProjectSelectedTemplateIds.forEach((tmplId) => {
+        const selectedTmpl = templates.find(t => t.id === tmplId);
+        if (selectedTmpl) {
+          selectedTmpl.tasks.forEach((tk, idx) => {
+            const taskId = `t_${tmplId}_${idx}_` + Math.random().toString(36).substr(2, 9);
+            const subTasks = (tk.subTasks || []).map((name, sIdx) => ({
+              id: `st_${tmplId}_${idx}_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+              taskId,
+              name,
+              isCompleted: false,
+              createdAt: new Date().toISOString()
+            }));
+
+            generatedTasks.push({
+              id: taskId,
+              projectId: editingProject.id,
+              deliverableId: 'custom-' + Date.now() + '-' + taskCounter,
+              name: tk.name,
+              type: tk.type,
+              assigneeId: editProjectAMId || '072',
+              status: TaskStatus.OPEN,
+              priority: tk.priority,
+              dueDate: new Date(Date.now() + (7 + taskCounter * 3) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              timeEstimate: tk.timeEstimate,
+              subTasks: subTasks
+            });
+            taskCounter++;
+          });
+        }
+      });
+
+      if (generatedTasks.length > 0) {
+        setTasks(prev => [...prev, ...generatedTasks]);
+        toast.success(`Appended ${generatedTasks.length} tasks from ${editProjectSelectedTemplateIds.length} operational templates to project.`);
+      }
+    }
+
+    toast.success(`Project "${editProjectName}" updated successfully!`);
+    setIsEditProjectDialogOpen(false);
+    setEditingProject(null);
+  };
+
   const handleUpdateProjectAM = (projectId: string, amId: string) => {
     setProjects(prevProjects => prevProjects.map(p => 
       p.id === projectId 
@@ -1104,370 +1203,41 @@ function Dashboard() {
 
     const generatedTasks: Task[] = [];
     
-    if (newProjectTemplate !== 'none') {
+    if (selectedTemplateIds.length > 0) {
       const templates = getTemplates();
-      const selectedTmpl = templates.find(t => t.id === newProjectTemplate);
-      if (selectedTmpl) {
-        selectedTmpl.tasks.forEach((tk, idx) => {
-          const taskId = `t_${newProjectTemplate}_${idx}_` + Math.random().toString(36).substr(2, 9);
-          const subTasks = (tk.subTasks || []).map((name, sIdx) => ({
-            id: `st_${newProjectTemplate}_${idx}_${sIdx}_` + Math.random().toString(36).substr(2, 9),
-            taskId,
-            name,
-            isCompleted: false,
-            createdAt: new Date().toISOString()
-          }));
-          
-          generatedTasks.push({
-            id: taskId,
-            projectId: projectId,
-            deliverableId: 'custom-' + Date.now() + '-' + idx,
-            name: tk.name,
-            type: tk.type,
-            assigneeId: selectedAMId,
-            status: TaskStatus.OPEN,
-            priority: tk.priority,
-            dueDate: new Date(Date.now() + (7 + idx * 3) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            timeEstimate: tk.timeEstimate,
-            subTasks: subTasks
+      let taskCounter = 0;
+      selectedTemplateIds.forEach((tmplId) => {
+        const selectedTmpl = templates.find(t => t.id === tmplId);
+        if (selectedTmpl) {
+          selectedTmpl.tasks.forEach((tk, idx) => {
+            const taskId = `t_${tmplId}_${idx}_` + Math.random().toString(36).substr(2, 9);
+            const subTasks = (tk.subTasks || []).map((name, sIdx) => ({
+              id: `st_${tmplId}_${idx}_${sIdx}_` + Math.random().toString(36).substr(2, 9),
+              taskId,
+              name,
+              isCompleted: false,
+              createdAt: new Date().toISOString()
+            }));
+            
+            generatedTasks.push({
+              id: taskId,
+              projectId: projectId,
+              deliverableId: 'custom-' + Date.now() + '-' + taskCounter,
+              name: tk.name,
+              type: tk.type,
+              assigneeId: selectedAMId,
+              status: TaskStatus.OPEN,
+              priority: tk.priority,
+              dueDate: new Date(Date.now() + (7 + taskCounter * 3) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              timeEstimate: tk.timeEstimate,
+              subTasks: subTasks
+            });
+            taskCounter++;
           });
-        });
-      }
-    } else if (false && newProjectTemplate === 'web_dev') {
-      const taskId1 = 't_wd1_' + Math.random().toString(36).substr(2, 9);
-      const taskId2 = 't_wd2_' + Math.random().toString(36).substr(2, 9);
-      const taskId3 = 't_wd3_' + Math.random().toString(36).substr(2, 9);
-      generatedTasks.push(
-        {
-          id: taskId1,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-1',
-          name: 'Regular maintenance tasks',
-          type: 'Web Development',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 5.0,
-          subTasks: []
-        },
-        {
-          id: taskId2,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-2',
-          name: 'New development',
-          type: 'Web Development',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 10.0,
-          subTasks: []
-        },
-        {
-          id: taskId3,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-3',
-          name: 'Ad-hoc tasks',
-          type: 'Web Development',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.LOW,
-          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 2.67, // 2:40 is 2.67 hrs
-          subTasks: [
-            { id: 'st_wd3_1_' + Math.random().toString(36).substr(2, 9), taskId: taskId3, name: "Task request receipt & validation", isCompleted: false, createdAt: new Date().toISOString() },
-            { id: 'st_wd3_2_' + Math.random().toString(36).substr(2, 9), taskId: taskId3, name: "Implementation & smoke testing", isCompleted: false, createdAt: new Date().toISOString() }
-          ]
         }
-      );
-    } else if (newProjectTemplate === 'ads_campaigns') {
-      const taskId1 = 't_ac1_' + Math.random().toString(36).substr(2, 9);
-      const taskId2 = 't_ac2_' + Math.random().toString(36).substr(2, 9);
-      const taskId3 = 't_ac3_' + Math.random().toString(36).substr(2, 9);
-      const taskId4 = 't_ac4_' + Math.random().toString(36).substr(2, 9);
-
-      const subTasks2 = [
-        "Client briefing & objective alignment",
-        "Competitor ad research & intelligence",
-        "Target audience definition & persona building",
-        "Keyword research & negative list preparation",
-        "Ad copy drafting (Headings & Descriptions)",
-        "Creative asset design request (banners/video)",
-        "Campaign budget & bidding strategy setup",
-        "UTM tracking & conversion pixel verification",
-        "Ad group staging & targeting configuration",
-        "Draft campaign review & sign-off",
-        "Campaign launch & initial bid adjustment"
-      ].map((name, idx) => ({
-        id: `st_ac2_${idx}_` + Math.random().toString(36).substr(2, 9),
-        taskId: taskId2,
-        name,
-        isCompleted: false,
-        createdAt: new Date().toISOString()
-      }));
-
-      const subTasks3 = [
-        "Daily budget & spend pacing monitor",
-        "Negative keyword addition",
-        "Bid adjustment & optimization",
-        "Search terms report analysis",
-        "Ad copy A/B performance review",
-        "Quality score diagnostic review",
-        "Audience segment performance audit",
-        "Landing page speed & bounce check",
-        "Budget relocation between ad groups",
-        "Mid-month client pacing update"
-      ].map((name, idx) => ({
-        id: `st_ac3_${idx}_` + Math.random().toString(36).substr(2, 9),
-        taskId: taskId3,
-        name,
-        isCompleted: false,
-        createdAt: new Date().toISOString()
-      }));
-
-      const subTasks4 = [
-        "Google Tag Manager container setup",
-        "GA4 property configuration & link",
-        "Google Ads account linking to GA4",
-        "Conversion action setup (Purchases/Leads)",
-        "Enhanced conversions activation",
-        "Google Merchant Center link (if shopping)",
-        "Remarketing tag installation on site",
-        "Custom segment creations (All Visitors, Cart Abandoners)",
-        "Ad strength standard checklist setup",
-        "Billing profile verification & setup",
-        "Negative placement list for display/PMax",
-        "Brand safety settings & content exclusion",
-        "Sitelink extensions creation (min 4)",
-        "Callout extensions setup (min 4)",
-        "Structured snippet setup",
-        "Promo or price extension setup if applicable",
-        "Automated rules configuration",
-        "Merchant Center feed diagnostics",
-        "Final health check & account validation"
-      ].map((name, idx) => ({
-        id: `st_ac4_${idx}_` + Math.random().toString(36).substr(2, 9),
-        taskId: taskId4,
-        name,
-        isCompleted: false,
-        createdAt: new Date().toISOString()
-      }));
-
-      generatedTasks.push(
-        {
-          id: taskId1,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-1',
-          name: 'Monthly Report - May 2026',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 4.0,
-          subTasks: []
-        },
-        {
-          id: taskId2,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-2',
-          name: 'New Campaigns- Ideation & Setup',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 12.0,
-          subTasks: subTasks2
-        },
-        {
-          id: taskId3,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-3',
-          name: 'Monthly activities',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 8.0,
-          subTasks: subTasks3
-        },
-        {
-          id: taskId4,
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-4',
-          name: 'Foundational Activities',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 15.0,
-          subTasks: subTasks4
-        }
-      );
-    } else if (newProjectTemplate === 'design') {
-      generatedTasks.push(
-        {
-          id: 't_ds1_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-1',
-          name: 'UI/UX Layout Design',
-          type: 'Design',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 8.0,
-          subTasks: []
-        },
-        {
-          id: 't_ds2_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-2',
-          name: 'Graphics & Asset Creation',
-          type: 'Design',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 4.0,
-          subTasks: []
-        },
-        {
-          id: 't_ds3_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-3',
-          name: 'Review & Feedback Loop',
-          type: 'Design',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.LOW,
-          dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 2.0,
-          subTasks: []
-        }
-      );
-    } else if (newProjectTemplate === 'content') {
-      generatedTasks.push(
-        {
-          id: 't_co1_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-1',
-          name: 'Content Writing & Drafting',
-          type: 'Content',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 6.0,
-          subTasks: []
-        },
-        {
-          id: 't_co2_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-2',
-          name: 'Editing & Proofreading',
-          type: 'Content',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 3.0,
-          subTasks: []
-        },
-        {
-          id: 't_co3_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-3',
-          name: 'SEO Content Optimization',
-          type: 'Content',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.LOW,
-          dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 2.0,
-          subTasks: []
-        }
-      );
-    } else if (newProjectTemplate === 'seo') {
-      generatedTasks.push(
-        {
-          id: 't_seo1_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-1',
-          name: 'On-Page SEO Audit',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 4.0,
-          subTasks: []
-        },
-        {
-          id: 't_seo2_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-2',
-          name: 'Keyword Research & Strategy',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.HIGH,
-          dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 6.0,
-          subTasks: []
-        },
-        {
-          id: 't_seo3_' + Math.random().toString(36).substr(2, 9),
-          projectId: projectId,
-          deliverableId: 'custom-' + Date.now() + '-3',
-          name: 'Backlink & Competitor Analysis',
-          type: 'Strategy',
-          assigneeId: selectedAMId,
-          status: TaskStatus.OPEN,
-          priority: Priority.NORMAL,
-          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          timeEstimate: 5.0,
-          subTasks: []
-        }
-      );
+      });
     } else {
       let nextTaskNum = tasks.length + 1;
       let newTaskId = 't' + nextTaskNum;
@@ -1499,7 +1269,7 @@ function Dashboard() {
     setNewProjectName('');
     setNewProjectWebsite('');
     setNewProjectCoordinator('');
-    setNewProjectTemplate('none');
+    setSelectedTemplateIds([]);
     
     // Redirect to the new project's board or tasks
     setSelectedProjectId(projectId);
@@ -1682,6 +1452,7 @@ function Dashboard() {
           onDeleteProject={handleDeleteProject}
           onUpdateProjectStatus={handleUpdateProjectStatus}
           currentUser={user}
+          onEditProject={handleOpenEditProject}
         />;
       case 'tasks':
         return <TaskEngine 
@@ -2507,42 +2278,86 @@ function Dashboard() {
             <div className="grid gap-2 bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4.5 space-y-2 mt-1">
               <div className="flex items-center space-x-2">
                 <span className="text-sm">🏢</span>
-                <Label htmlFor="template" className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Team Template Preset (Odoo Style)</Label>
+                <Label className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Operational Team Templates</Label>
               </div>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
-                Choose a team template to automatically pre-populate standard operational workflows for this project.
+                Select one or more operational templates to automatically pre-populate and build comprehensive, multi-team workflows for this project.
               </p>
-              <Select value={newProjectTemplate} onValueChange={setNewProjectTemplate}>
-                <SelectTrigger className="w-full border-zinc-200/60 bg-white/50 dark:bg-zinc-950/50">
-                  <SelectValue placeholder="No Preset (Start Empty)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">❌ Custom (Start Empty)</SelectItem>
-                  {templatesList.map(tmpl => (
-                    <SelectItem key={tmpl.id} value={tmpl.id}>
-                      {tmpl.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {newProjectTemplate !== 'none' && (
-                <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5 mt-1 space-y-1">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Predefined Task Cards:</span>
-                  <div className="space-y-1">
-                    {(() => {
-                      const selectedTmpl = templatesList.find(t => t.id === newProjectTemplate);
-                      if (!selectedTmpl || selectedTmpl.tasks.length === 0) {
-                        return <span className="text-[10px] text-zinc-500 italic block py-1">No predefined tasks in this template.</span>;
-                      }
-                      return selectedTmpl.tasks.map((tk, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                          <span>• {tk.name}</span>
-                          <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">
-                            {tk.timeEstimate}h
+              
+              <div className="space-y-2 mt-2 max-h-[160px] overflow-y-auto pr-1">
+                {templatesList.map(tmpl => {
+                  const isChecked = selectedTemplateIds.includes(tmpl.id);
+                  return (
+                    <div 
+                      key={tmpl.id} 
+                      onClick={() => {
+                        setSelectedTemplateIds(prev => 
+                          prev.includes(tmpl.id) 
+                            ? prev.filter(id => id !== tmpl.id) 
+                            : [...prev, tmpl.id]
+                        );
+                      }}
+                      className={cn(
+                        "flex items-start space-x-3 p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer",
+                        isChecked 
+                          ? "bg-amber-500/10 border-amber-500/30 dark:border-amber-500/40 text-amber-900 dark:text-amber-100" 
+                          : "bg-white/50 dark:bg-zinc-950/40 border-zinc-200/60 dark:border-zinc-800/80 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/30"
+                      )}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => {}} // handled by parent div onClick
+                        className="mt-0.5 rounded border-zinc-300 dark:border-zinc-700 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer accent-amber-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold leading-none">{tmpl.name}</span>
+                          <span className="text-[9px] font-mono font-bold text-amber-600 dark:text-amber-400">
+                            {tmpl.tasks.length} tasks
                           </span>
                         </div>
-                      ));
-                    })()}
+                        {tmpl.description && (
+                          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium mt-1 truncate">
+                            {tmpl.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedTemplateIds.length > 0 && (
+                <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5 mt-2 space-y-1.5">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">
+                    Predefined Task Cards to be Generated ({
+                      selectedTemplateIds.reduce((acc, tmplId) => {
+                        const tmpl = templatesList.find(t => t.id === tmplId);
+                        return acc + (tmpl ? tmpl.tasks.length : 0);
+                      }, 0)
+                    } Tasks):
+                  </span>
+                  <div className="max-h-[100px] overflow-y-auto space-y-1.5 pr-1">
+                    {selectedTemplateIds.map(tmplId => {
+                      const tmpl = templatesList.find(t => t.id === tmplId);
+                      if (!tmpl) return null;
+                      return (
+                        <div key={tmpl.id} className="space-y-1 bg-amber-500/5 p-2 rounded-lg border border-amber-500/10">
+                          <div className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider mb-1">
+                            {tmpl.name}
+                          </div>
+                          {tmpl.tasks.map((tk, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[10px] text-zinc-600 dark:text-zinc-300 font-medium pl-1.5">
+                              <span>• {tk.name}</span>
+                              <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded font-bold">
+                                {tk.timeEstimate}h
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2555,6 +2370,220 @@ function Dashboard() {
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-xl font-bold uppercase tracking-widest text-xs"
             >
               Confirm & Activate Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditProjectDialogOpen} onOpenChange={setIsEditProjectDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-2xl font-bold tracking-tight">Edit Project Details</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-1.5 py-2 space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Name</Label>
+              <Input 
+                id="edit-name" 
+                placeholder="e.g. Acme Corp Web Build" 
+                value={editProjectName}
+                onChange={(e) => setEditProjectName(e.target.value)}
+              />
+            </div>
+            
+            <div className="grid gap-2">
+              <Label htmlFor="edit-website" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Website URL <span className="text-zinc-400 lowercase font-medium">(Optional)</span></Label>
+              <Input 
+                id="edit-website" 
+                placeholder="e.g. www.acme.com" 
+                value={editProjectWebsite}
+                onChange={(e) => setEditProjectWebsite(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-type" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Type</Label>
+                <Select value={editProjectType} onValueChange={setEditProjectType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Retainer">Retainer (Monthly)</SelectItem>
+                    <SelectItem value="One-Off">One-Off Project</SelectItem>
+                    <SelectItem value="Always-On">Always-On</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-status" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Status</Label>
+                <Select value={editProjectStatus} onValueChange={(val: any) => setEditProjectStatus(val)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="In Review">In Review</SelectItem>
+                    <SelectItem value="Client Review">Client Review</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="On Hold">On Hold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {user && ADMIN_ROLES.includes(user.role) && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-client" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Client Partner</Label>
+                  <Select value={editProjectClientId} onValueChange={setEditProjectClientId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select Client Partner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.filter(u => u.role === UserRole.CLIENT).map(client => (
+                        <SelectItem key={client.id} value={client.id}>
+                          <div className="flex items-center gap-1.5">
+                            <Briefcase className="w-3.5 h-3.5 text-zinc-500" />
+                            <span>{client.name} ({client.email})</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-coordinator" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project Coordinator (Client Side)</Label>
+                  <Input 
+                    id="edit-coordinator" 
+                    placeholder="e.g. John Doe (Coordinator)" 
+                    value={editProjectCoordinator}
+                    onChange={(e) => setEditProjectCoordinator(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-am" className="text-xs font-bold uppercase tracking-widest text-zinc-400">Project AM / Assignee</Label>
+              <Select value={editProjectAMId} onValueChange={setEditProjectAMId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Project Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.filter(u => u.role !== UserRole.CLIENT).map(am => (
+                    <SelectItem key={am.id} value={am.id}>{am.name} ({am.designation || am.role.replace('_', ' ')})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2 bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4.5 space-y-2 mt-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm">🏢</span>
+                <Label className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Append Operational Team Templates</Label>
+              </div>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
+                Select one or more operational templates to generate and append standard task cards to this project.
+              </p>
+              
+              <div className="space-y-2 mt-2 max-h-[160px] overflow-y-auto pr-1">
+                {templatesList.map(tmpl => {
+                  const isChecked = editProjectSelectedTemplateIds.includes(tmpl.id);
+                  return (
+                    <div 
+                      key={tmpl.id} 
+                      onClick={() => {
+                        setEditProjectSelectedTemplateIds(prev => 
+                          prev.includes(tmpl.id) 
+                            ? prev.filter(id => id !== tmpl.id) 
+                            : [...prev, tmpl.id]
+                        );
+                      }}
+                      className={cn(
+                        "flex items-start space-x-3 p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer",
+                        isChecked 
+                          ? "bg-amber-500/10 border-amber-500/30 dark:border-amber-500/40 text-amber-900 dark:text-amber-100" 
+                          : "bg-white/50 dark:bg-zinc-950/40 border-zinc-200/60 dark:border-zinc-800/80 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/30"
+                      )}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => {}} // handled by parent div onClick
+                        className="mt-0.5 rounded border-zinc-300 dark:border-zinc-700 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer accent-amber-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold leading-none">{tmpl.name}</span>
+                          <span className="text-[9px] font-mono font-bold text-amber-600 dark:text-amber-400">
+                            {tmpl.tasks.length} tasks
+                          </span>
+                        </div>
+                        {tmpl.description && (
+                          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium mt-1 truncate">
+                            {tmpl.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {editProjectSelectedTemplateIds.length > 0 && (
+                <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5 mt-2 space-y-1.5">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">
+                    Predefined Task Cards to be Appended ({
+                      editProjectSelectedTemplateIds.reduce((acc, tmplId) => {
+                        const tmpl = templatesList.find(t => t.id === tmplId);
+                        return acc + (tmpl ? tmpl.tasks.length : 0);
+                      }, 0)
+                    } Tasks):
+                  </span>
+                  <div className="max-h-[100px] overflow-y-auto space-y-1.5 pr-1">
+                    {editProjectSelectedTemplateIds.map(tmplId => {
+                      const tmpl = templatesList.find(t => t.id === tmplId);
+                      if (!tmpl) return null;
+                      return (
+                        <div key={tmpl.id} className="space-y-1 bg-amber-500/5 p-2 rounded-lg border border-amber-500/10">
+                          <div className="text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider mb-1">
+                            {tmpl.name}
+                          </div>
+                          {tmpl.tasks.map((tk, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[10px] text-zinc-600 dark:text-zinc-300 font-medium pl-1.5">
+                              <span>• {tk.name}</span>
+                              <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded font-bold">
+                                {tk.timeEstimate}h
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="pt-4 gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditProjectDialogOpen(false)}
+              className="w-full sm:w-auto h-12 rounded-xl font-bold uppercase tracking-widest text-xs border-zinc-200 dark:border-zinc-800"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveProjectEdit}
+              disabled={!editProjectName}
+              className="w-full sm:w-auto sm:ml-2 bg-indigo-600 hover:bg-indigo-700 text-white h-12 rounded-xl font-bold uppercase tracking-widest text-xs"
+            >
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

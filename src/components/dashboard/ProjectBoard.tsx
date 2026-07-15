@@ -16,7 +16,8 @@ import {
   Trash2,
   UserPlus,
   Download,
-  Eye
+  Eye,
+  Edit
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -43,7 +44,8 @@ export function ProjectBoard({
   onUpdateProjectAM,
   onDeleteProject,
   onUpdateProjectStatus,
-  currentUser
+  currentUser,
+  onEditProject
 }: { 
   onProjectClick?: (id: string) => void;
   projects: Project[];
@@ -57,6 +59,7 @@ export function ProjectBoard({
   onDeleteProject?: (projectId: string) => void;
   onUpdateProjectStatus?: (projectId: string, status: 'Active' | 'Completed' | 'On Hold' | 'Pending' | 'In Review' | 'Client Review') => void;
   currentUser?: UserProfile;
+  onEditProject?: (project: Project) => void;
 }) {
   const isAdminUser = currentUser && (ADMIN_ROLES.includes(currentUser.role) || isSuperAdmin(currentUser));
   const canCreateProject = isSuperAdmin(currentUser) || hasPermission(currentUser, 'canCreateProject');
@@ -295,6 +298,13 @@ export function ProjectBoard({
                           <DropdownMenuItem onClick={() => onTogglePin(project.id)} className="text-xs cursor-pointer">
                             <Pin className="w-3.5 h-3.5 mr-2 text-zinc-500" />
                             <span>{isPinned ? "Unpin Project" : "Pin Project"}</span>
+                          </DropdownMenuItem>
+                        )}
+
+                        {onEditProject && (
+                          <DropdownMenuItem onClick={() => onEditProject(project)} className="text-xs cursor-pointer">
+                            <Edit className="w-3.5 h-3.5 mr-2 text-zinc-500" />
+                            <span>Edit Project Details</span>
                           </DropdownMenuItem>
                         )}
 

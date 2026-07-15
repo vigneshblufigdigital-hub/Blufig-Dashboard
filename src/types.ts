@@ -123,6 +123,7 @@ export interface Project {
   websiteUrl?: string;
   clientCoordinator?: string;
   timingHours?: number;
+  templateIds?: string[];
 }
 
 export interface SubTask {

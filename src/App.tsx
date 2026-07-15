@@ -1063,7 +1063,7 @@ function Dashboard() {
     setEditProjectClientId(project.clientId || '');
     setEditProjectCoordinator(project.clientCoordinator || '');
     setEditProjectStatus(project.status || 'Active');
-    setEditProjectSelectedTemplateIds([]);
+    setEditProjectSelectedTemplateIds(project.templateIds || []);
     setIsEditProjectDialogOpen(true);
   };
 
@@ -1086,16 +1086,21 @@ function Dashboard() {
       accountManagerId: editProjectAMId,
       clientId: editProjectClientId,
       clientCoordinator: editProjectCoordinator.trim() || undefined,
-      status: editProjectStatus
+      status: editProjectStatus,
+      templateIds: editProjectSelectedTemplateIds
     } : p));
 
-    // If some templates are selected to append tasks
-    if (editProjectSelectedTemplateIds.length > 0) {
+    // Determine newly added templates to append tasks only for them
+    const previouslySelected = editingProject.templateIds || [];
+    const newlyAddedTemplates = editProjectSelectedTemplateIds.filter(id => !previouslySelected.includes(id));
+
+    // If some templates are newly selected to append tasks
+    if (newlyAddedTemplates.length > 0) {
       const templates = getTemplates();
       const generatedTasks: Task[] = [];
       let taskCounter = 0;
       
-      editProjectSelectedTemplateIds.forEach((tmplId) => {
+      newlyAddedTemplates.forEach((tmplId) => {
         const selectedTmpl = templates.find(t => t.id === tmplId);
         if (selectedTmpl) {
           selectedTmpl.tasks.forEach((tk, idx) => {
@@ -1130,7 +1135,7 @@ function Dashboard() {
 
       if (generatedTasks.length > 0) {
         setTasks(prev => [...prev, ...generatedTasks]);
-        toast.success(`Appended ${generatedTasks.length} tasks from ${editProjectSelectedTemplateIds.length} operational templates to project.`);
+        toast.success(`Appended ${generatedTasks.length} tasks from ${newlyAddedTemplates.length} operational templates to project.`);
       }
     }
 
@@ -1198,7 +1203,8 @@ function Dashboard() {
       status: 'Active',
       startDate: new Date().toISOString().split('T')[0],
       websiteUrl: resolvedWebsite,
-      clientCoordinator: newProjectCoordinator.trim() || undefined
+      clientCoordinator: newProjectCoordinator.trim() || undefined,
+      templateIds: selectedTemplateIds
     };
 
     const generatedTasks: Task[] = [];
@@ -2485,15 +2491,16 @@ function Dashboard() {
             <div className="grid gap-2 bg-amber-500/5 border border-amber-500/10 rounded-2xl p-4.5 space-y-2 mt-2">
               <div className="flex items-center space-x-2">
                 <span className="text-sm">🏢</span>
-                <Label className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Append Operational Team Templates</Label>
+                <Label className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Project Operational Team Templates</Label>
               </div>
               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
-                Select one or more operational templates to generate and append standard task cards to this project.
+                The operational templates applied to this project. Check additional templates to generate and append more task cards.
               </p>
               
               <div className="space-y-2 mt-2 max-h-[160px] overflow-y-auto pr-1">
                 {templatesList.map(tmpl => {
                   const isChecked = editProjectSelectedTemplateIds.includes(tmpl.id);
+                  const isAlreadyApplied = editingProject?.templateIds?.includes(tmpl.id);
                   return (
                     <div 
                       key={tmpl.id} 
@@ -2519,7 +2526,14 @@ function Dashboard() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold leading-none">{tmpl.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold leading-none">{tmpl.name}</span>
+                            {isAlreadyApplied && (
+                              <span className="text-[8px] font-black uppercase px-1 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 leading-none">
+                                Applied
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[9px] font-mono font-bold text-amber-600 dark:text-amber-400">
                             {tmpl.tasks.length} tasks
                           </span>
@@ -2535,18 +2549,18 @@ function Dashboard() {
                 })}
               </div>
 
-              {editProjectSelectedTemplateIds.length > 0 && (
+              {editProjectSelectedTemplateIds.some(id => !editingProject?.templateIds?.includes(id)) && (
                 <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5 mt-2 space-y-1.5">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">
                     Predefined Task Cards to be Appended ({
-                      editProjectSelectedTemplateIds.reduce((acc, tmplId) => {
+                      editProjectSelectedTemplateIds.filter(id => !editingProject?.templateIds?.includes(id)).reduce((acc, tmplId) => {
                         const tmpl = templatesList.find(t => t.id === tmplId);
                         return acc + (tmpl ? tmpl.tasks.length : 0);
                       }, 0)
-                    } Tasks):
+                    } New Tasks):
                   </span>
                   <div className="max-h-[100px] overflow-y-auto space-y-1.5 pr-1">
-                    {editProjectSelectedTemplateIds.map(tmplId => {
+                    {editProjectSelectedTemplateIds.filter(id => !editingProject?.templateIds?.includes(id)).map(tmplId => {
                       const tmpl = templatesList.find(t => t.id === tmplId);
                       if (!tmpl) return null;
                       return (

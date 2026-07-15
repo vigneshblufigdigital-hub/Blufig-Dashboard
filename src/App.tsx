@@ -1721,7 +1721,8 @@ function Dashboard() {
       case 'smtp':
         return <SMTPDiagnostics />;
       case 'admin':
-        return isAdmin ? (
+        const canAccessAdmin = user && (ADMIN_ROLES.includes(user.role) || isSuperAdmin(user) || hasPermission(user, 'canManageUsers'));
+        return canAccessAdmin ? (
           <div className="space-y-6">
             <div className="flex items-center space-x-1 bg-zinc-100 dark:bg-zinc-900/60 p-1 rounded-xl w-fit border border-zinc-200/50 dark:border-zinc-800">
               <button
@@ -1763,7 +1764,19 @@ function Dashboard() {
               <TemplateEditor />
             )}
           </div>
-        ) : <Overview projects={projects} tasks={tasks} />;
+        ) : (
+          <Overview 
+            projects={projects} 
+            tasks={tasks} 
+            pinnedProjectIds={pinnedProjectIds}
+            onTogglePin={togglePinProject}
+            onClickProject={(projectId) => {
+              setSelectedProjectId(projectId);
+              setActiveTab('tasks');
+            }}
+            onNavigateToProjects={() => setActiveTab('projects')}
+          />
+        );
       case 'reports':
         return <ClientReports 
           reports={reports} 

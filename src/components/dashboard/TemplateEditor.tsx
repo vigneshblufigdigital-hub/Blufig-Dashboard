@@ -14,7 +14,8 @@ import {
   Layers,
   Settings,
   HelpCircle,
-  FileCheck
+  FileCheck,
+  X
 } from 'lucide-react';
 import { 
   Card, 
@@ -40,6 +41,67 @@ export function TemplateEditor() {
   // Active states for editing / creating
   const [editingTask, setEditingTask] = useState<TemplateTask | null>(null);
   const [newSubTaskName, setNewSubTaskName] = useState<string>('');
+
+  // Active states for template creation and deletion
+  const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateEmoji, setNewTemplateEmoji] = useState('📋');
+  const [deletingTemplate, setDeletingTemplate] = useState<TeamTemplate | null>(null);
+
+  const handleCreateTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTemplateName.trim()) {
+      toast.error('Please enter a template name.');
+      return;
+    }
+
+    const newId = 'tmpl_' + Math.random().toString(36).substr(2, 9);
+    const newTmpl: TeamTemplate = {
+      id: newId,
+      name: `${newTemplateEmoji} ${newTemplateName.trim()}`,
+      tasks: []
+    };
+
+    setTemplates(prev => [...prev, newTmpl]);
+    setSelectedTemplateId(newId);
+    setSelectedTaskId('');
+    setEditingTask(null);
+
+    // Reset fields
+    setNewTemplateName('');
+    setNewTemplateEmoji('📋');
+    setIsAddTemplateOpen(false);
+
+    toast.success('New team template added! Please click "Save Blueprint Config" to persist your changes.');
+  };
+
+  const handleDeleteTemplate = () => {
+    if (!deletingTemplate) return;
+    
+    const targetId = deletingTemplate.id;
+    if (templates.length <= 1) {
+      toast.error('Cannot delete the last remaining template.');
+      return;
+    }
+
+    const updated = templates.filter(t => t.id !== targetId);
+    setTemplates(updated);
+
+    if (selectedTemplateId === targetId) {
+      const nextActive = updated[0];
+      setSelectedTemplateId(nextActive.id);
+      if (nextActive.tasks.length > 0) {
+        setSelectedTaskId(nextActive.tasks[0].id);
+        setEditingTask({ ...nextActive.tasks[0] });
+      } else {
+        setSelectedTaskId('');
+        setEditingTask(null);
+      }
+    }
+
+    setDeletingTemplate(null);
+    toast.success(`Template "${deletingTemplate.name}" removed from working config. Click "Save Blueprint Config" to persist.`);
+  };
 
   // Initial load
   useEffect(() => {
@@ -238,21 +300,40 @@ export function TemplateEditor() {
       </div>
 
       {/* Grid of Templates Selectors */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
         {templates.map(tmpl => {
           const isActive = selectedTemplateId === tmpl.id;
           return (
-            <button
+            <div
               key={tmpl.id}
               onClick={() => selectTemplate(tmpl.id)}
               className={cn(
-                "p-3 rounded-xl border text-left transition-all duration-200 relative overflow-hidden group",
+                "p-3 rounded-xl border text-left transition-all duration-200 relative overflow-hidden group cursor-pointer select-none",
                 isActive 
                   ? "bg-zinc-900 border-zinc-900 dark:bg-zinc-100 dark:border-zinc-100 text-white dark:text-zinc-900 shadow-md"
                   : "bg-white border-zinc-100 hover:border-zinc-300 hover:bg-zinc-50/50 dark:bg-zinc-950 dark:border-zinc-800 dark:hover:border-zinc-700"
               )}
             >
-              <div className="text-xs font-semibold truncate relative z-10">
+              {/* Delete Template (Only if more than 1 template exists) */}
+              {templates.length > 1 && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeletingTemplate(tmpl);
+                  }}
+                  className={cn(
+                    "absolute top-1.5 right-1.5 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 z-20 cursor-pointer",
+                    isActive 
+                      ? "text-zinc-300 hover:text-rose-400 hover:bg-zinc-800" 
+                      : "text-zinc-400 hover:text-rose-600 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  )}
+                  title={`Delete template "${tmpl.name}"`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </div>
+              )}
+
+              <div className="text-xs font-semibold truncate relative z-10 pr-4">
                 {tmpl.name}
               </div>
               <div className={cn(
@@ -264,9 +345,20 @@ export function TemplateEditor() {
               {isActive && (
                 <div className="absolute top-0 right-0 w-8 h-8 bg-brand-secondary/10 dark:bg-zinc-900/5 rounded-full filter blur-sm translate-x-2 -translate-y-2" />
               )}
-            </button>
+            </div>
           );
         })}
+
+        {/* Add Template Button */}
+        <button
+          onClick={() => setIsAddTemplateOpen(true)}
+          className="p-3 rounded-xl border border-dashed border-zinc-300 hover:border-zinc-900 dark:border-zinc-700 dark:hover:border-zinc-300 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300 transition-all duration-200 text-left flex flex-col justify-center items-center min-h-[62px] cursor-pointer"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+            <Plus className="w-3.5 h-3.5" />
+            Add Template
+          </div>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -532,6 +624,142 @@ export function TemplateEditor() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Add Template Modal */}
+      <AnimatePresence>
+        {isAddTemplateOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-sans">Add New Team Template</h3>
+                    <p className="text-[10px] text-zinc-500">Create a new workspace preset for standard project plans.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsAddTemplateOpen(false)}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleCreateTemplate} className="p-6 space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Choose Icon/Emoji</Label>
+                    <div className="grid grid-cols-6 gap-2">
+                      {['💻', '🎨', '✍️', '🔍', '📣', '⚙️', '📈', '🔒', '👥', '🚀', '🛠️', '📅'].map(emoji => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => setNewTemplateEmoji(emoji)}
+                          className={cn(
+                            "h-10 text-lg rounded-xl flex items-center justify-center border transition-all cursor-pointer",
+                            newTemplateEmoji === emoji 
+                              ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:border-zinc-100" 
+                              : "bg-white border-zinc-100 hover:bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800"
+                          )}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Template Name</Label>
+                    <Input 
+                      required
+                      placeholder="e.g. CRO & Page Audits"
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      className="rounded-xl text-xs h-9"
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end space-x-2 pt-4 border-t border-zinc-100 dark:border-zinc-900 mt-6">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsAddTemplateOpen(false)}
+                    className="rounded-xl text-xs h-8"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    className="rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs h-8 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    Create Template
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Template Modal */}
+      <AnimatePresence>
+        {deletingTemplate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-md w-full overflow-hidden p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 font-sans">Delete Team Template?</h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Are you sure you want to delete <span className="font-bold text-zinc-900 dark:text-zinc-100">{deletingTemplate.name}</span>?
+                  </p>
+                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium pt-1">
+                    This will remove this preset from the working team templates. Any active projects will remain untouched, but new projects cannot select this template unless you reset to defaults.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setDeletingTemplate(null)}
+                  className="rounded-xl text-xs h-8"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleDeleteTemplate}
+                  className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-8"
+                >
+                  Delete Template
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

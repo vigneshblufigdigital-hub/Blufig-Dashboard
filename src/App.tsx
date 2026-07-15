@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Overview } from './components/dashboard/Overview';
 import { Button } from '@/components/ui/button';
@@ -48,7 +48,7 @@ import { UserProfileView } from './components/dashboard/UserProfileView';
 import { CalendarView } from './components/dashboard/CalendarView';
 import { TemplateEditor } from './components/dashboard/TemplateEditor';
 import { SMTPDiagnostics } from './components/dashboard/SMTPDiagnostics';
-import { getTemplates } from './utils/templateStorage';
+import { getTemplates, TeamTemplate } from './utils/templateStorage';
 import { 
   Dialog, 
   DialogContent, 
@@ -92,6 +92,19 @@ function Dashboard() {
   const [newProjectClientId, setNewProjectClientId] = useState<string>('client-1'); // Default to Sarah Johnson
   const [newProjectCoordinator, setNewProjectCoordinator] = useState('');
   const [newProjectTemplate, setNewProjectTemplate] = useState('none');
+  const [templatesList, setTemplatesList] = useState<TeamTemplate[]>([]);
+
+  useEffect(() => {
+    setTemplatesList(getTemplates());
+    const handleUpdate = () => {
+      setTemplatesList(getTemplates());
+    };
+    window.addEventListener('blufig_templates_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('blufig_templates_updated', handleUpdate);
+    };
+  }, []);
+
   const [isAssigning, setIsAssigning] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<any>(null);
 
@@ -2475,100 +2488,32 @@ function Dashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">❌ Custom (Start Empty)</SelectItem>
-                  <SelectItem value="web_dev">💻 Web Dev Team Template</SelectItem>
-                  <SelectItem value="design">🎨 Design Team Template</SelectItem>
-                  <SelectItem value="content">✍️ Content Team Template</SelectItem>
-                  <SelectItem value="seo">🔍 SEO Team Template</SelectItem>
-                  <SelectItem value="ads_campaigns">📣 Ads Campaigns Template</SelectItem>
+                  {templatesList.map(tmpl => (
+                    <SelectItem key={tmpl.id} value={tmpl.id}>
+                      {tmpl.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {newProjectTemplate !== 'none' && (
                 <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5 mt-1 space-y-1">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Predefined Task Cards:</span>
-                  {newProjectTemplate === 'web_dev' && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Regular maintenance tasks</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">5:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• New development</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">10:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Ad-hoc tasks</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:40h</span>
-                      </div>
-                    </div>
-                  )}
-                  {newProjectTemplate === 'ads_campaigns' && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Monthly Report - May 2026</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• New Campaigns- Ideation & Setup</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">12:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Monthly activities</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">8:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Foundational Activities</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">15:00h</span>
-                      </div>
-                    </div>
-                  )}
-                  {newProjectTemplate === 'design' && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• UI/UX Layout Design</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">8:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Graphics & Asset Creation</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Review & Feedback Loop</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:00h</span>
-                      </div>
-                    </div>
-                  )}
-                  {newProjectTemplate === 'content' && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Content Writing & Drafting</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">6:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Editing & Proofreading</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">3:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• SEO Content Optimization</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">2:00h</span>
-                      </div>
-                    </div>
-                  )}
-                  {newProjectTemplate === 'seo' && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• On-Page SEO Audit</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">4:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Keyword Research & Strategy</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">6:00h</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
-                        <span>• Backlink & Competitor Analysis</span>
-                        <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">5:00h</span>
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-1">
+                    {(() => {
+                      const selectedTmpl = templatesList.find(t => t.id === newProjectTemplate);
+                      if (!selectedTmpl || selectedTmpl.tasks.length === 0) {
+                        return <span className="text-[10px] text-zinc-500 italic block py-1">No predefined tasks in this template.</span>;
+                      }
+                      return selectedTmpl.tasks.map((tk, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                          <span>• {tk.name}</span>
+                          <span className="font-mono text-[9px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1 rounded">
+                            {tk.timeEstimate}h
+                          </span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
               )}
             </div>

@@ -6,6 +6,19 @@ import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { initializeApp } from "firebase/app";
 import { initializeFirestore, collection, addDoc, doc, getDoc } from "firebase/firestore";
+import { 
+  Document, 
+  Packer, 
+  Paragraph, 
+  TextRun, 
+  HeadingLevel, 
+  AlignmentType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle
+} from "docx";
 
 dotenv.config();
 
@@ -46,6 +59,410 @@ async function startServer() {
   app.use(express.json({ limit: "15mb" }));
 
   const apiRouter = express.Router();
+
+  // Word Document Guide Generation API Route
+  apiRouter.get("/download-guide", async (req, res) => {
+    try {
+      const createHeading1 = (text: string) => new Paragraph({
+        spacing: { before: 360, after: 120 },
+        keepNext: true,
+        children: [
+          new TextRun({
+            text: text,
+            font: "Arial",
+            size: 32, // 16pt
+            bold: true,
+            color: "31a9e1",
+          })
+        ]
+      });
+
+      const createHeading2 = (text: string) => new Paragraph({
+        spacing: { before: 240, after: 100 },
+        keepNext: true,
+        children: [
+          new TextRun({
+            text: text,
+            font: "Arial",
+            size: 26, // 13pt
+            bold: true,
+            color: "0f172a",
+          })
+        ]
+      });
+
+      const createHeading3 = (text: string) => new Paragraph({
+        spacing: { before: 180, after: 80 },
+        keepNext: true,
+        children: [
+          new TextRun({
+            text: text,
+            font: "Arial",
+            size: 22, // 11pt
+            bold: true,
+            color: "4b5563",
+          })
+        ]
+      });
+
+      const createBodyText = (text: string, options: { bold?: boolean; italics?: boolean; color?: string } = {}) => new Paragraph({
+        spacing: { after: 100 },
+        children: [
+          new TextRun({
+            text: text,
+            font: "Arial",
+            size: 21, // 10.5pt
+            ...options
+          })
+        ]
+      });
+
+      const createBulletPoint = (text: string, boldPrefix?: string) => {
+        const children = [];
+        if (boldPrefix) {
+          children.push(new TextRun({
+            text: boldPrefix,
+            font: "Arial",
+            size: 21,
+            bold: true
+          }));
+        }
+        children.push(new TextRun({
+          text: text,
+          font: "Arial",
+          size: 21
+        }));
+        return new Paragraph({
+          bullet: { level: 0 },
+          spacing: { after: 80 },
+          children
+        });
+      };
+
+      const createCalloutBox = (textLines: string[], title?: string) => {
+        return new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  shading: {
+                    fill: "f8fafc"
+                  },
+                  margins: {
+                    top: 140,
+                    bottom: 140,
+                    left: 200,
+                    right: 200,
+                  },
+                  borders: {
+                    top: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                    bottom: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                    left: { style: BorderStyle.SINGLE, size: 24, color: "31a9e1" },
+                    right: { style: BorderStyle.NONE, size: 0, color: "auto" },
+                  },
+                  children: [
+                    ...(title ? [new Paragraph({
+                      spacing: { after: 80 },
+                      children: [
+                        new TextRun({
+                          text: title,
+                          font: "Arial",
+                          size: 21,
+                          bold: true,
+                          color: "0f172a"
+                        })
+                      ]
+                    })] : []),
+                    ...textLines.map(line => new Paragraph({
+                      spacing: { after: 40 },
+                      children: [
+                        new TextRun({
+                          text: line,
+                          font: "Courier New",
+                          size: 18,
+                          color: "334155"
+                        })
+                      ]
+                    }))
+                  ]
+                })
+              ]
+            })
+          ]
+        });
+      };
+
+      const docElements: any[] = [
+        // Title Banner
+        new Paragraph({
+          spacing: { before: 240, after: 240 },
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: "📘 BLUFIG Operations System",
+              font: "Arial",
+              size: 38, // 19pt
+              bold: true,
+              color: "31a9e1",
+            }),
+            new TextRun({
+              text: "\nEmployee & User Guide",
+              font: "Arial",
+              size: 26, // 13pt
+              bold: true,
+              color: "1f2937",
+            })
+          ]
+        }),
+
+        createBodyText("Welcome to the BluFig Operations System. This platform is an enterprise-grade agency management suite designed specifically for digital marketing, design, and web development workflows. It serves as the single source of truth for managing clients, projects, task assignments, team calendars, live time tracking, financial invoicing, performance analytics, and direct client collaborations."),
+
+        createHeading2("Table of Contents"),
+        createBulletPoint("Core Architecture & Workflow Loops", "1. "),
+        createBulletPoint("User Roles & Permission Enforcements", "2. "),
+        createBulletPoint("Step-by-Step Menu Guide & Features", "3. "),
+        createBulletPoint("Master Operational Workflows", "4. "),
+        createBulletPoint("Best Practices for Daily Operations", "5. "),
+
+        createHeading1("1. Core Architecture & Workflow Loops"),
+        createBodyText("The BluFig platform is built as a highly responsive, full-stack digital workspace. The overall lifecycle of operations consists of four tightly synchronized loops:"),
+
+        createCalloutBox([
+          " +-------------------------------------------------------------+",
+          " |                     1. PROJECT INITIALIZATION               |",
+          " |  - Set metadata (website, client, AM).                      |",
+          " |  - Select and load multiple Team Templates (SEO, Web, etc.). |",
+          " +------------------------------+------------------------------+",
+          "                                |",
+          "                                v",
+          " +-------------------------------------------------------------+",
+          " |                     2. TASK EXECUTION                       |",
+          " |  - Real-time background timers track billable hours.        |",
+          " |  - Tasks transition via Kanban (In Progress -> Review).     |",
+          " |  - Custom checklists trace granular progress on cards.      |",
+          " +------------------------------+------------------------------+",
+          "                                |",
+          "                                v",
+          " +-------------------------------------------------------------+",
+          " |                     3. CLIENT PORTAL LOOP                   |",
+          " |  - Deliverables are published securely to client view.      |",
+          " |  - Client logs in, reviews live interactive files.          |",
+          " |  - Actions: Mark as Approved OR Request Revisions.          |",
+          " +------------------------------+------------------------------+",
+          "                                |",
+          "                                v",
+          " +-------------------------------------------------------------+",
+          " |                     4. REPORTING & BILLING                  |",
+          " |  - Gemini AI analyzes performance & generates commentary.  |",
+          " |  - Automated invoices sync billing states and track pay.    |",
+          " |  - SMTP Gateway dispatches instant progress digests.        |",
+          " +-------------------------------------------------------------+"
+        ], "Visualized Lifecycle Loop"),
+
+        createHeading1("2. User Roles & Permission Enforcements"),
+        createBodyText("To ensure bank-grade security and client-internal data isolation, the system enforces a strict Role-Based Access Control (RBAC) architecture."),
+
+        createHeading2("A. Designation Classes"),
+        createBodyText("Every user account in the system is assigned a designated operational role:"),
+        createBulletPoint("AGENCY_ADMIN, ACCOUNT_DIRECTOR, DIGITAL_LEAD, CONTENT_LEAD, WEB_DEV_MANAGER, DESIGN_LEAD, HR_SPECIALIST", "• Management & Leads: "),
+        createBulletPoint("ACCOUNT_MANAGER (AM)", "• Client Servicing: "),
+        createBulletPoint("PERFORMANCE_ANALYST, SEO_SPECIALIST, CONTENT_WRITER, WEB_DEVELOPER, HUBSPOT_SPECIALIST, DESIGNER, DESIGNER_MOTION", "• Specialists & Creators: "),
+        createBulletPoint("SALES, PRE_SALES, BD_EXECUTIVE", "• Sales & Business Development: "),
+        createBulletPoint("ADMIN_SUPPORT", "• Administrative Support: "),
+        createBulletPoint("CLIENT (e.g. external stakeholders and company contacts)", "• Client Partners: "),
+
+        createHeading2("B. Super Admin Identification"),
+        createBodyText("Certain critical administrative commands (such as editing SMTP configurations or performing global permission overrides) are reserved for Super Admins. The system identifies Super Admins based on:"),
+        createBulletPoint("User account ID 001 or 036.", "1. "),
+        createBulletPoint("Verified email domain matches: amit@blufig.digital, pintu@blufig.digital, vignesh@blufig.digital, vigneshatwork21@gmail.com", "2. "),
+        createBulletPoint("Explicit administrative boolean: isSuperAdmin: true is set on their database profile.", "3. "),
+
+        createHeading2("C. Granular Delegated Permissions"),
+        createBodyText("For non-super admin accounts, individual managers can grant specific permission keys to customize capabilities:"),
+        createBulletPoint("Permission to initiate brand-new client projects and assign primary managers.", "• canCreateProject: "),
+        createBulletPoint("Permission to archive or purge historical project files.", "• canDeleteProject: "),
+        createBulletPoint("Permission to draft, edit, and record payments for financial invoices.", "• canManageInvoices: "),
+        createBulletPoint("Permission to add, disable, or modify permissions for agency personnel.", "• canManageUsers: "),
+
+        createHeading1("3. Step-by-Step Menu Guide & Features"),
+
+        createHeading2("1. Overview Workspace"),
+        createBulletPoint("The personal dashboard and control tower for daily work.", "• Purpose: "),
+        createBulletPoint("Quick view of all current engagements, tasks due today, productivity rates (completed 7d), and delivery health charts.", "• Key Metrics Displayed: "),
+        createBulletPoint("A personalized, interactive workspace filtering tasks assigned to the currently logged-in user. Employees can start/stop tracking time directly, update task status instantly, and expand checklists.", "• My Active Assignments: "),
+
+        createHeading2("2. Projects Board"),
+        createBulletPoint("Visualized project management mapping out the agency's portfolio.", "• Purpose: "),
+        createBulletPoint("Kanban & List Toggle, detailed card information (client coordinators, active hours logged, URLs, status chips), and project type specifier (Retainer, One-Off, Always-On).", "• Features: "),
+
+        createHeading2("3. Tasks Workspace"),
+        createBulletPoint("High-performance task board and spreadsheet controller.", "• Purpose: "),
+        createBulletPoint("Global Filter Bar (multi-select search by Project, Assignee, Priority, Status, Deliverable), checklist managers, and 9-state status Kanban Columns.", "• Interactive Controls: "),
+
+        createHeading2("4. Calendar Workspace"),
+        createBulletPoint("Visually track agency-wide milestones and card deadlines on a monthly calendar grid.", "• Purpose: "),
+        createBulletPoint("Color-coded priority alerts (High/Critical in amber/red), interactive filters to isolate single projects or assignees.", "• Features: "),
+
+        createHeading2("5. Team Directory"),
+        createBulletPoint("Employee utilization tracker and live attendance workspace.", "• Purpose: "),
+        createBulletPoint("Skills & Expertise Tags, real-time remote/office location indicators, and a Capacity Gauge monitoring task count to prevent burnout.", "• Features: "),
+
+        createHeading2("6. Reports & AI Commentary"),
+        createBulletPoint("Strategic performance analytics with built-in AI assistant.", "• Purpose: "),
+        createBulletPoint("Track task velocity, logged time, and billing metrics. Features Google Gemini integration via \"Generate Strategic AI Commentary\" to evaluate backlog bottlenecks and structure executive reports instantly.", "• Features: "),
+
+        createHeading2("7. Invoice Manager"),
+        createBulletPoint("Professional invoice billing and revenue tracking.", "• Purpose: "),
+        createBulletPoint("Add retainer/project fees, track status chips (Draft, Pending, Paid, Overdue), and auto-index invoices with high-fidelity PDF generation.", "• Features: "),
+
+        createHeading2("8. Time Tracking Console"),
+        createBulletPoint("Granular hour logging for strict timesheet reporting.", "• Purpose: "),
+        createBulletPoint("Universal floating screen-level timer widget, tracks work down to the second, and syncs log outputs directly to project budgets and active invoices.", "• Features: "),
+
+        createHeading2("9. Admin Workspace"),
+        createBulletPoint("Employee user accounts and permission keys configuration.", "• Purpose: "),
+        createBulletPoint("Provision workspace credentials, modify roles, assign core departments, configure skill tags, and grant specific administrative bypass toggles.", "• Features: "),
+
+        createHeading2("10. SMTP Outbound Gateway"),
+        createBulletPoint("Manage notification routing networks.", "• Purpose: "),
+        createBulletPoint("Configure SMTP credentials (Host, Port, SSL, App Passwords) to send automated progress alerts. Includes a live test suite to dispatch connection tests.", "• Features: "),
+
+        createHeading2("11. Client Portal"),
+        createBulletPoint("Secure client-facing reviews sandbox.", "• Purpose: "),
+        createBulletPoint("Isolates active deliverables and feedback logs for each client account. Clients can mark items as \"Approved\" or \"Revision Requested\" directly.", "• Features: "),
+
+        createHeading1("4. Master Operational Workflows"),
+        createBodyText("Follow these step-by-step instructions to perform core activities in the BluFig platform."),
+
+        createHeading2("A. Initiating a Project with Multi-Team Templates"),
+        createBodyText("When launching a new client engagement, administrators can save hours of manually structuring tasks by combining pre-configured Operational Team Templates (Web Dev, SEO, Design, etc.)."),
+        createCalloutBox([
+          " 1. Open Projects Tab -> Click \"Initiate Project\"",
+          "                           |",
+          "                           v",
+          " 2. Fill Name, Website, Client Partner, AM",
+          "                           |",
+          "                           v",
+          " 3. Under \"Operational Team Templates\" Section",
+          "    - Check Web Dev Template  [x]",
+          "    - Check SEO Template      [x]",
+          "    - Check Design Template   [ ]",
+          "                           |",
+          "                           v",
+          " 4. Click \"Confirm & Activate Project\"",
+          "    - Project creates & populates template tasks instantly!"
+        ], "Project Template Creation Map"),
+        createBulletPoint("Click on Projects in the sidebar.", "1. "),
+        createBulletPoint("In the top-right corner, click Initiate New Project.", "2. "),
+        createBulletPoint("Fill out the core administrative parameters: Name, URL, Client Partner, and Project AM.", "3. "),
+        createBulletPoint("Scroll to the Operational Team Templates section.", "4. "),
+        createBulletPoint("Select one or more operational templates (e.g. both Web Dev and SEO templates).", "5. "),
+        createBulletPoint("Review the live preview of generated template tasks.", "6. "),
+        createBulletPoint("Click Confirm & Activate Project. The system will deploy the workflows instantly to your active boards.", "7. "),
+
+        createHeading2("B. Generating and Appending Templates to Existing Projects"),
+        createBodyText("If a project expands mid-lifecycle, managers can append new team templates without losing historical data or existing task boards."),
+        createCalloutBox([
+          " 1. Open Projects Tab -> Click Card Dropdown Menu (...)",
+          "                           |",
+          "                           v",
+          " 2. Click \"Edit Project Details\"",
+          "                           |",
+          "                           v",
+          " 3. Check NEW Templates to Append (e.g. Content Team)",
+          "                           |",
+          "                           v",
+          " 4. Click \"Save Changes\" -> Tasks are appended cleanly"
+        ], "Append Template Flow Map"),
+        createBulletPoint("Navigate to the Projects workspace.", "1. "),
+        createBulletPoint("Find the project card you wish to update.", "2. "),
+        createBulletPoint("Click the three dots dropdown menu (...) and select Edit Project Details.", "3. "),
+        createBulletPoint("Check any additional templates you wish to append.", "4. "),
+        createBulletPoint("The preview list will update to display only the new tasks that will be appended.", "5. "),
+        createBulletPoint("Click Save Changes. The new task workflows are seamlessly integrated into your active project board.", "6. "),
+
+        createHeading2("C. Structuring and Dispatching Task Cards"),
+        createBulletPoint("Click Tasks in the sidebar.", "1. "),
+        createBulletPoint("Click Create Task in the top-right corner.", "2. "),
+        createBulletPoint("Configure your task requirements: Name, Project, Deliverable Type, Assignee, Priority, Estimate (Hours), and Due Date.", "3. "),
+        createBulletPoint("Add Checklist Items to break down the task into step-by-step milestones.", "4. "),
+        createBulletPoint("Click Create Task to dispatch the card. The assignee will receive an instant dashboard alert.", "5. "),
+
+        createHeading2("D. Registering Employees & Granting Permission Keys"),
+        createBulletPoint("Click on the Admin workspace tab (accessible to Admins & Super Admins).", "1. "),
+        createBulletPoint("Click Add New User or select the Edit icon next to an existing employee profile.", "2. "),
+        createBulletPoint("Configure the profile details: Name, Email, Department, Designation, and Skill Tags.", "3. "),
+        createBulletPoint("Under System Permissions Override, check or uncheck authorization toggles (canCreateProject, canDeleteProject, canManageInvoices, canManageUsers).", "4. "),
+        createBulletPoint("Click Save User Details to apply the permissions.", "5. "),
+
+        createHeading2("E. Setting up the SMTP Email Notification Gateway"),
+        createBulletPoint("Log in as a Super Admin (e.g., using an account like amit@blufig.digital).", "1. "),
+        createBulletPoint("Navigate to SMTP Gateway in the sidebar.", "2. "),
+        createBulletPoint("Complete the server configuration fields: Host, Port, Username, Password, Sender Email.", "3. "),
+        createBulletPoint("Click Save Connection Settings.", "4. "),
+        createBulletPoint("Use the Test Connection section to send a test email to your inbox to verify credentials.", "5. "),
+
+        createHeading2("F. Interactive Client Approvals & Revision Loops"),
+        createBulletPoint("Publish Deliverables: Attach file links, designs, or drafts directly to a task card. Set status to \"Client Review\".", "1. "),
+        createBulletPoint("Client Reviews File: The client partner logs into their dedicated Client Portal tab to see tasks waiting in Client Review.", "2. "),
+        createBulletPoint("Leaving Feedback: The client expands the task to review the draft: click Request Revision (enters feedback, status becomes Revision Requested) or Approve (status becomes Approved/Done).", "3. "),
+
+        createHeading1("5. Best Practices for Daily Operations"),
+        createBulletPoint("Always use the built-in floating timer when working on client tasks. Accurate tracking ensures optimal resource planning and correct invoicing.", "• Track Time in Real-Time: "),
+        createBulletPoint("When adding website links or deliverable links, omit leading spaces or double protocols. The system automatically validates and formats URLs securely.", "• Keep URLs Clean: "),
+        createBulletPoint("Before assigning critical high-priority tasks, check the Team Directory to review team capacity levels.", "• Prevent Burnout with Team Gauges: "),
+        createBulletPoint("Run the AI Commentary generation tool on the Reports page before weekly client status calls to easily review deliverables, bottleneck patterns, and strategic metrics.", "• Leverage Gemini AI Summaries: "),
+
+        new Paragraph({
+          spacing: { before: 240 },
+          children: [
+            new TextRun({
+              text: "For system-level inquiries, custom permission upgrades, or server status details, contact the technical administration desk at ",
+              font: "Arial",
+              size: 21,
+              italics: true
+            }),
+            new TextRun({
+              text: "connect@blufig.digital",
+              font: "Arial",
+              size: 21,
+              bold: true,
+              italics: true,
+              color: "31a9e1"
+            }),
+            new TextRun({
+              text: ".",
+              font: "Arial",
+              size: 21,
+              italics: true
+            })
+          ]
+        })
+      ];
+
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: docElements,
+          },
+        ],
+      });
+
+      const buffer = await Packer.toBuffer(doc);
+      
+      res.setHeader("Content-Disposition", "attachment; filename=\"BluFig_Operations_System_Employee_Guide.docx\"");
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.send(buffer);
+    } catch (error: any) {
+      console.error("Error generating docx:", error);
+      res.status(500).send("Error generating Word document guide: " + error.message);
+    }
+  });
 
   // API Route for Task Summary
   apiRouter.post("/tasks/summary", async (req, res) => {

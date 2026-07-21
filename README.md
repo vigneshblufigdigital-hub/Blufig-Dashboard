@@ -2,6 +2,13 @@
 
 An enterprise-grade project management and client portal solution designed specifically for digital marketing agencies.
 
+---
+
+### 📖 Looking for the User & Employee Operations Manual?
+We have created a highly detailed, step-by-step onboarding guide for agency employees and managers. Learn how to initiate projects with templates, configure system permissions, manage client feedback loops, and set up the SMTP gateway in the [**Blufig Employee Operations Guide (EMPLOYEE_GUIDE.md)**](./EMPLOYEE_GUIDE.md).
+
+---
+
 ## Features
 
 - **Dynamic Dashboard**: Real-time metrics for campaign performance, billing, and team utilization.

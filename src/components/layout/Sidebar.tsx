@@ -11,7 +11,8 @@ import {
   Layers,
   MessageSquare,
   Calendar,
-  Server
+  Server,
+  Download
 } from 'lucide-react';
 import { UserRole, ADMIN_ROLES, UserProfile, isSuperAdmin, hasPermission } from '../../types';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,15 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar({ activeTab, setActiveTab, userRole, user }: SidebarProps) {
+  const handleDownloadGuide = () => {
+    const link = document.createElement("a");
+    link.href = "/api/download-guide";
+    link.setAttribute("download", "BluFig_Operations_System_Employee_Guide.docx");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredNavItems = NAV_ITEMS.filter(item => {
     if (item.id === 'smtp') {
       return isSuperAdmin(user);
@@ -89,11 +99,19 @@ export function Sidebar({ activeTab, setActiveTab, userRole, user }: SidebarProp
       </nav>
 
       <div className="p-4 border-t border-sidebar-border mt-auto">
-        <div className="bg-zinc-50 dark:bg-zinc-900/60 rounded-xl p-4 border border-zinc-100 dark:border-zinc-800">
-          <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Help & Support</p>
+        <div className="bg-zinc-50 dark:bg-zinc-900/60 rounded-xl p-4 border border-zinc-100 dark:border-zinc-800 space-y-2">
+          <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-1">Help & Support</p>
           <Button 
             variant="outline" 
-            className="w-full justify-start text-xs h-8 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300"
+            className="w-full justify-start text-xs h-8 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            onClick={handleDownloadGuide}
+          >
+            <Download className="w-3 h-3 mr-2 text-brand-primary" />
+            Download User Guide
+          </Button>
+          <Button 
+            variant="outline" 
+            className="w-full justify-start text-xs h-8 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             onClick={() => window.location.href = "mailto:connect@blufig.digital?cc=pintu@blufig.digital,vignesh@blufig.digital,ankit@blufig.digital&subject=Support%20Desk%2520Inquiry%2520-%2520BluFig%2520Operations"}
           >
             <MessageSquare className="w-3 h-3 mr-2 text-brand-secondary" />

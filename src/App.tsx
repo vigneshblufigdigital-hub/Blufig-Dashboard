@@ -1631,19 +1631,9 @@ function Dashboard() {
 
   const isClient = user.role === UserRole.CLIENT;
 
-  const getFontSizeStyle = (size: string) => {
-    switch (size) {
-      case 'sm': return { fontSize: '0.875rem' };
-      case 'lg': return { fontSize: '1.125rem' };
-      case 'xl': return { fontSize: '1.25rem' };
-      default: return { fontSize: '1rem' };
-    }
-  };
-
   return (
     <div 
       className="flex min-h-screen bg-background font-sans text-foreground transition-colors duration-200"
-      style={getFontSizeStyle(fontSize)}
     >
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:flex-shrink-0">
@@ -1726,7 +1716,7 @@ function Dashboard() {
                     setTimeout(() => setIsSearchFocused(false), 200);
                   }}
                   placeholder="Search projects, tasks, or experts..." 
-                  className="pl-10 pr-8 h-9 bg-zinc-50 dark:bg-zinc-900 border-none focus-visible:ring-1 focus-visible:ring-border text-foreground placeholder:text-zinc-400 w-full" 
+                  className="pl-10 pr-8 h-9 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 focus-visible:ring-1 focus-visible:ring-brand-secondary/50 text-foreground placeholder:text-zinc-450 dark:placeholder:text-zinc-500 w-full" 
                 />
                 {searchQuery && (
                   <button 

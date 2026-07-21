@@ -44,6 +44,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
+    const root = window.document.documentElement;
+    switch (fontSize) {
+      case 'sm':
+        root.style.fontSize = '14px';
+        break;
+      case 'base':
+        root.style.fontSize = '16px';
+        break;
+      case 'lg':
+        root.style.fontSize = '18px';
+        break;
+      case 'xl':
+        root.style.fontSize = '20px';
+        break;
+      default:
+        root.style.fontSize = '16px';
+    }
     localStorage.setItem('fontSize', fontSize);
   }, [fontSize]);
 

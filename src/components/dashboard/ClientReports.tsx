@@ -86,149 +86,20 @@ export function ClientReports({
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('monthly');
   const [clientSearchTerm, setClientSearchTerm] = useState('');
 
-  // Pre-seed "Insight CRM Monthly" project and tasks if not present in current workspace lists
-  const demoProjects = [...projects];
-  if (!demoProjects.some(p => p.name.toLowerCase().includes('insight') || p.name.toLowerCase().includes('crm'))) {
-    demoProjects.unshift({
-      id: 'p-insight-crm',
-      name: 'Insight CRM Monthly',
-      clientId: 'client-1',
-      accountManagerId: '130',
-      type: ProjectType.RETAINER,
-      status: 'Active',
-      startDate: '2026-06-01',
-      websiteUrl: 'https://insightcrm.app'
-    });
-  }
-
-  // Pre-seed "Analec Platform Integration" project as well
-  if (!demoProjects.some(p => p.name.toLowerCase().includes('analec'))) {
-    demoProjects.unshift({
-      id: 'p-analec',
-      name: 'Analec Platform Integration',
-      clientId: 'client-1',
-      accountManagerId: '130',
-      type: ProjectType.ONE_OFF,
-      status: 'Active',
-      startDate: '2026-06-15',
-      websiteUrl: 'https://analec.com'
-    });
-  }
-
-  const demoTasks = [...tasks];
-  if (demoProjects.some(p => p.id === 'p-insight-crm') && !demoTasks.some(t => t.projectId === 'p-insight-crm')) {
-    demoTasks.push(
-      {
-        id: 't-insight-1',
-        projectId: 'p-insight-crm',
-        deliverableId: 'd1',
-        name: 'CRM Schema Setup & Custom Field Integration',
-        type: 'Web Dev',
-        assigneeId: '036',
-        status: TaskStatus.DONE,
-        priority: Priority.HIGH,
-        dueDate: '2026-06-25',
-        createdAt: '2026-06-20',
-        updatedAt: '2026-06-24',
-        timeEstimate: 4,
-        timeLogged: 3.5,
-        timeLoggedSeconds: 3.5 * 3600,
-        subTasks: []
-      },
-      {
-        id: 't-insight-2',
-        projectId: 'p-insight-crm',
-        deliverableId: 'd1',
-        name: 'Automated Data Migration pipeline from Salesforce REST API',
-        type: 'Database',
-        assigneeId: '036',
-        status: TaskStatus.IN_PROGRESS,
-        priority: Priority.CRITICAL,
-        dueDate: '2026-06-29',
-        createdAt: '2026-06-22',
-        updatedAt: '2026-06-28',
-        timeEstimate: 5,
-        timeLogged: 5.5,
-        timeLoggedSeconds: 5.5 * 3600,
-        subTasks: []
-      },
-      {
-        id: 't-insight-3',
-        projectId: 'p-insight-crm',
-        deliverableId: 'd2',
-        name: 'Customer Dashboard UI Tuning & Layout Polish',
-        type: 'Design',
-        assigneeId: '076',
-        status: TaskStatus.REVIEW,
-        priority: Priority.NORMAL,
-        dueDate: '2026-06-28',
-        createdAt: '2026-06-25',
-        updatedAt: '2026-06-29',
-        timeEstimate: 2,
-        timeLogged: 1.2,
-        timeLoggedSeconds: 1.2 * 3600,
-        subTasks: []
-      }
-    );
-  }
-
-  // Pre-seed "Analec" tasks
-  if (demoProjects.some(p => p.id === 'p-analec') && !demoTasks.some(t => t.projectId === 'p-analec')) {
-    demoTasks.push(
-      {
-        id: 't-analec-1',
-        projectId: 'p-analec',
-        deliverableId: 'd1',
-        name: 'Analec API Authentication Setup',
-        type: 'Web Dev',
-        assigneeId: '036',
-        status: TaskStatus.DONE,
-        priority: Priority.HIGH,
-        dueDate: '2026-06-26',
-        createdAt: '2026-06-18',
-        updatedAt: '2026-06-25',
-        timeEstimate: 6,
-        timeLogged: 4.8,
-        timeLoggedSeconds: 4.8 * 3600,
-        subTasks: []
-      },
-      {
-        id: 't-analec-2',
-        projectId: 'p-analec',
-        deliverableId: 'd2',
-        name: 'Frontend Chart Visualization for Analec Feeds',
-        type: 'Design',
-        assigneeId: '076',
-        status: TaskStatus.IN_PROGRESS,
-        priority: Priority.NORMAL,
-        dueDate: '2026-06-30',
-        createdAt: '2026-06-20',
-        updatedAt: '2026-06-28',
-        timeEstimate: 4,
-        timeLogged: 3.2,
-        timeLoggedSeconds: 3.2 * 3600,
-        subTasks: []
-      }
-    );
-  }
+  // Real live data from props (dummy/seeded projects and tasks removed)
+  const demoProjects = projects;
+  const demoTasks = tasks;
 
   // Helper mappings for clients
   const getClientName = (clientId: string) => {
     const clientUser = (users.length ? users : MOCK_USERS).find(u => u.id === clientId);
     if (clientUser) {
-      if (clientId === 'client-1') return 'Sarah Johnson (Insight & Analec)';
       return clientUser.name;
     }
-    if (clientId === 'client-1') return 'Sarah Johnson (Insight & Analec)';
-    if (clientId === 'client-2') return 'Robert Globex';
-    if (clientId === 'client-3') return 'Elena Vance';
     return `Client (${clientId})`;
   };
 
   const getClientCompany = (clientId: string) => {
-    if (clientId === 'client-1') return 'Acme Corp / Insight & Analec';
-    if (clientId === 'client-2') return 'Globex Corporation';
-    if (clientId === 'client-3') return 'Black Mesa Research';
     const clientUser = (users.length ? users : MOCK_USERS).find(u => u.id === clientId);
     return clientUser?.designation || 'External Partner';
   };

@@ -590,80 +590,111 @@ function SubtaskInput({
   };
 
   return (
-    <div className="space-y-2 pt-2">
+    <div className="p-3 bg-zinc-50/80 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-2.5">
+      {/* Subtask Title Input Row */}
       <div className="flex items-center space-x-2">
         <div className="relative flex-1">
           <Input 
-            placeholder="Add sub-task..." 
-            className="h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-7 focus-visible:ring-brand-secondary/20"
+            placeholder="Add sub-task name..." 
+            className="h-9 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-8 focus-visible:ring-orange-500/20 font-medium rounded-xl"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !showDescription) {
                 e.preventDefault();
                 handleAdd();
               }
             }}
           />
-          <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+          <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn(
-            "h-8 px-2 text-[10px] font-bold rounded-lg border-zinc-200 dark:border-zinc-800 flex items-center gap-1 shrink-0 cursor-pointer",
-            showDescription || description ? "bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30" : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-          )}
-          onClick={() => setShowDescription(!showDescription)}
-          title="Add optional subtask description"
-        >
-          <FileText className="w-3 h-3 text-brand-secondary" />
-          <span>{description ? "Description Added" : "+ Description"}</span>
-        </Button>
+        {!showDescription && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 px-2.5 text-[11px] font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1.5 rounded-xl cursor-pointer"
+            onClick={() => setShowDescription(true)}
+          >
+            <FileText className="w-3.5 h-3.5 text-orange-500" />
+            <span>+ Description</span>
+          </Button>
+        )}
 
-        {name.trim() && (
+        {!showDescription && name.trim() && (
           <Button 
             type="button"
             size="sm" 
-            className="h-8 text-xs font-bold bg-brand-secondary text-white hover:bg-brand-secondary/90 shrink-0 px-3 rounded-lg cursor-pointer"
+            className="h-9 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white shrink-0 px-4 rounded-xl cursor-pointer shadow-sm transition-all flex items-center gap-1"
             onClick={handleAdd}
           >
-            Add
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add</span>
           </Button>
         )}
       </div>
 
-      {(showDescription || description) && (
-        <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-2 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1">
-              <FileText className="w-3 h-3 text-brand-secondary" />
-              <span>Subtask Description (Optional)</span>
-            </span>
-            <DescriptionImageUploader 
-              onAddImage={(imgUrl) => {
-                setDescription(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
-              }}
-            />
-          </div>
-          <Textarea
-            placeholder="Add detailed instructions, notes, or image links for this subtask..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="text-xs bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 min-h-[50px] resize-y rounded-lg p-2"
-          />
-          {description && (
-            <div className="pt-1">
-              <TaskDescriptionRenderer 
-                description={description} 
-                onRemoveImage={(imgUrl) => {
-                  setDescription(prev => prev ? prev.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : '');
+      {/* Expandable Optional Description Area */}
+      {showDescription && (
+        <div className="pt-1 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="p-3 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                <FileText className="w-3 h-3 text-orange-500" />
+                <span>Subtask Description (Optional)</span>
+              </span>
+              <DescriptionImageUploader 
+                onAddImage={(imgUrl) => {
+                  setDescription(prev => (prev ? prev + `\n![Image](${imgUrl})\n` : `![Image](${imgUrl})\n`));
                 }}
               />
             </div>
-          )}
+
+            <Textarea
+              placeholder="Add details, notes, or instructions for this subtask..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="text-xs bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 min-h-[60px] resize-y rounded-lg p-2.5"
+            />
+
+            {description && description.includes('![') && (
+              <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                <TaskDescriptionRenderer 
+                  description={description} 
+                  onRemoveImage={(imgUrl) => {
+                    setDescription(prev => prev ? prev.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : '');
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Action Row at Bottom of Form (Logical & Ergonomic) */}
+          <div className="flex items-center justify-end space-x-2 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 rounded-lg px-3"
+              onClick={() => {
+                setShowDescription(false);
+                if (!description.trim()) setDescription('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button"
+              size="sm" 
+              disabled={!name.trim()}
+              className="h-8 text-xs font-bold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-4 rounded-lg cursor-pointer shadow-sm flex items-center gap-1"
+              onClick={handleAdd}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Subtask</span>
+            </Button>
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Table, 
   TableBody, 
@@ -41,12 +41,23 @@ import {
   Zap,
   GitFork,
   Workflow,
-  RotateCcw
+  RotateCcw,
+  Edit3,
+  MessageSquare,
+  History,
+  UserPlus,
+  Image as ImageIcon,
+  Pencil,
+  X,
+  Check,
+  Upload,
+  Link as LinkIcon,
+  FileText
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { TaskStatus, Priority, Task, SubTask, TaskWorkflowStep, UserRole, Project, UserProfile, ADMIN_ROLES, isSuperAdmin } from '@/src/types';
+import { TaskStatus, Priority, Task, SubTask, TaskWorkflowStep, TaskActivity, UserRole, Project, UserProfile, ADMIN_ROLES, isSuperAdmin } from '@/src/types';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -147,6 +158,839 @@ const parseManualDurationString = (input: string): number => {
 
   return 0;
 };
+
+interface SubtaskAssigneesPickerProps {
+  subtask: SubTask;
+  taskId: string;
+  users: UserProfile[];
+  onUpdateAssignees: (taskId: string, subtaskId: string, assigneeIds: string[]) => void;
+}
+
+export function SubtaskAssigneesPicker({ subtask, taskId, users, onUpdateAssignees }: SubtaskAssigneesPickerProps) {
+  const currentAssigneeIds = subtask.assigneeIds && subtask.assigneeIds.length > 0 
+    ? subtask.assigneeIds 
+    : (subtask.assigneeId ? [subtask.assigneeId] : []);
+  
+  const assignedUsers = users.filter(u => currentAssigneeIds.includes(u.id));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="focus:outline-none focus:ring-0">
+        {assignedUsers.length > 0 ? (
+          <div className="flex items-center -space-x-1.5 hover:opacity-80 transition-opacity cursor-pointer select-none">
+            {assignedUsers.slice(0, 3).map((u) => (
+              <div 
+                key={u.id} 
+                className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-[9px] font-bold border-2 border-white dark:border-zinc-950 shadow-sm"
+                title={`${u.name} (${u.role})`}
+              >
+                {u.name.charAt(0)}
+              </div>
+            ))}
+            {assignedUsers.length > 3 && (
+              <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center text-[8px] font-extrabold border-2 border-white dark:border-zinc-950">
+                +{assignedUsers.length - 3}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center space-x-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors cursor-pointer select-none">
+            <span className="w-4 h-4 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-[10px] font-semibold">
+              +
+            </span>
+            <span>Assign</span>
+          </div>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56 p-2 rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-xl">
+        <div className="px-2 py-1 text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 mb-1">
+          Assign Persons ({assignedUsers.length})
+        </div>
+        <div className="max-h-48 overflow-y-auto space-y-1">
+          {users.filter(u => u.role !== UserRole.CLIENT).map(u => {
+            const isAssigned = currentAssigneeIds.includes(u.id);
+            return (
+              <div 
+                key={u.id}
+                className={cn(
+                  "flex items-center justify-between p-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors",
+                  isAssigned ? "bg-purple-50 text-purple-900 dark:bg-purple-950/30 dark:text-purple-300" : "hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-700 dark:text-zinc-300"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const nextIds = isAssigned 
+                    ? currentAssigneeIds.filter(id => id !== u.id)
+                    : [...currentAssigneeIds, u.id];
+                  onUpdateAssignees(taskId, subtask.id, nextIds);
+                }}
+              >
+                <div className="flex items-center space-x-2">
+                  <Avatar className="w-5 h-5 border shadow-sm">
+                    <AvatarFallback className="text-[8px] font-bold bg-zinc-100 dark:bg-zinc-800">{u.name.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate max-w-[120px]">{u.name}</span>
+                </div>
+                <Checkbox checked={isAssigned} className="brand-checkbox h-3.5 w-3.5" />
+              </div>
+            );
+          })}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+interface SubtaskStatusBoxProps {
+  subtask: SubTask;
+  taskId: string;
+  onUpdateStatus: (taskId: string, subtaskId: string, status: TaskStatus) => void;
+}
+
+export function SubtaskStatusBox({ subtask, taskId, onUpdateStatus }: SubtaskStatusBoxProps) {
+  const currentStatus = subtask.status || (subtask.isCompleted ? TaskStatus.DONE : TaskStatus.OPEN);
+
+  return (
+    <Select 
+      value={currentStatus} 
+      onValueChange={(newStatus) => {
+        onUpdateStatus(taskId, subtask.id, newStatus as TaskStatus);
+      }}
+    >
+      <SelectTrigger className={cn(
+        "h-6 px-2 text-[8px] font-extrabold uppercase tracking-wider rounded-lg border transition-all w-[100px] cursor-pointer shrink-0 shadow-sm",
+        (currentStatus === TaskStatus.OPEN) && "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-800",
+        currentStatus === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-900/40",
+        currentStatus === TaskStatus.REVIEW && "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900/40",
+        currentStatus === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-300 dark:border-teal-900/40",
+        currentStatus === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-900/40",
+        currentStatus === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-300 dark:border-indigo-900/40",
+        currentStatus === TaskStatus.DONE && "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900/40",
+        currentStatus === TaskStatus.BLOCKED && "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-900/40",
+        currentStatus === TaskStatus.CANCELLED && "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900/40"
+      )}>
+        <SelectValue placeholder="Status" />
+      </SelectTrigger>
+      <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800 min-w-[140px]">
+        <SelectItem value={TaskStatus.OPEN} className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50 dark:text-zinc-400">Open</SelectItem>
+        <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[9px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50 dark:text-blue-400">In Progress</SelectItem>
+        <SelectItem value={TaskStatus.REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50 dark:text-amber-400">Review</SelectItem>
+        <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50 dark:text-teal-400">Client Review</SelectItem>
+        <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[9px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50 dark:text-purple-400">Revision Requested</SelectItem>
+        <SelectItem value={TaskStatus.APPROVED} className="text-[9px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50 dark:text-indigo-400">Approved</SelectItem>
+        <SelectItem value={TaskStatus.DONE} className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50 dark:text-emerald-400">Done</SelectItem>
+        <SelectItem value={TaskStatus.BLOCKED} className="text-[9px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50 dark:text-rose-400">Blocked</SelectItem>
+        <SelectItem value={TaskStatus.CANCELLED} className="text-[9px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50 dark:text-red-400">Cancelled</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+interface TaskActivityFeedProps {
+  task: Task;
+  onAddComment: (taskId: string, commentText: string) => void;
+}
+
+export function TaskActivityFeed({ task, onAddComment }: TaskActivityFeedProps) {
+  const [commentInput, setCommentInput] = useState('');
+  const activities = task.activities || [];
+
+  const handlePost = () => {
+    if (!commentInput.trim()) return;
+    onAddComment(task.id, commentInput.trim());
+    setCommentInput('');
+  };
+
+  return (
+    <div className="space-y-3.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase font-extrabold text-zinc-400 tracking-wider flex items-center gap-1.5">
+          <History className="w-3.5 h-3.5 text-brand-secondary" />
+          Activity Log & Updates ({activities.length})
+        </span>
+      </div>
+
+      {/* Comment Input */}
+      <div className="flex items-center gap-2">
+        <Input 
+          placeholder="Type an activity update, note, or comment..." 
+          value={commentInput}
+          onChange={(e) => setCommentInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handlePost();
+          }}
+          className="h-8 text-xs rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950"
+        />
+        <Button 
+          size="sm" 
+          onClick={handlePost}
+          disabled={!commentInput.trim()}
+          className="h-8 px-3 rounded-xl bg-brand-secondary hover:bg-brand-secondary/90 text-white font-bold text-[10px] uppercase tracking-wider"
+        >
+          Post
+        </Button>
+      </div>
+
+      {/* Activity List */}
+      <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+        {activities.length === 0 ? (
+          <div className="text-center py-4 text-xs text-zinc-400 italic bg-zinc-50/50 dark:bg-zinc-900/10 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+            No activity recorded yet for this task.
+          </div>
+        ) : (
+          activities.map((act) => (
+            <div key={act.id} className="flex items-start space-x-2.5 bg-zinc-50/80 dark:bg-zinc-900/30 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800 text-xs">
+              <Avatar className="w-6 h-6 border shadow-sm shrink-0 mt-0.5">
+                <AvatarFallback className="text-[8px] font-bold bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                  {act.userName?.charAt(0) || '?'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate text-[11px]">{act.userName}</span>
+                  <span className="text-[9px] font-medium text-zinc-400">
+                    {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <Badge variant="outline" className="text-[8px] font-extrabold uppercase tracking-wider py-0 px-1.5 bg-brand-secondary/10 text-brand-secondary border-brand-secondary/20">
+                    {act.action}
+                  </Badge>
+                  {act.details && (
+                    <span className="text-zinc-600 dark:text-zinc-400 font-medium text-[11px]">
+                      {act.details}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function parseDescriptionImages(descriptionText: string) {
+  if (!descriptionText) return { cleanText: '', images: [] };
+
+  const images: { alt: string; url: string }[] = [];
+  const mdImageRegex = /!\[(.*?)\]\((.*?)\)/g;
+  let match;
+  let textWithoutMdImages = descriptionText;
+
+  while ((match = mdImageRegex.exec(descriptionText)) !== null) {
+    images.push({ alt: match[1] || 'Task image', url: match[2] });
+  }
+
+  textWithoutMdImages = textWithoutMdImages.replace(mdImageRegex, '').trim();
+
+  const urlRegex = /(https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp|svg)|data:image\/[a-zA-Z]+;base64,[^\s]+)/gi;
+  let urlMatch;
+  while ((urlMatch = urlRegex.exec(textWithoutMdImages)) !== null) {
+    const foundUrl = urlMatch[1];
+    if (!images.some(img => img.url === foundUrl)) {
+      images.push({ alt: 'Attached Image', url: foundUrl });
+    }
+  }
+
+  const cleanText = textWithoutMdImages.replace(urlRegex, '').trim();
+
+  return { cleanText, images };
+}
+
+function TaskDescriptionRenderer({ 
+  description, 
+  onRemoveImage 
+}: { 
+  description?: string; 
+  onRemoveImage?: (imageUrl: string) => void;
+}) {
+  const [activePreviewImage, setActivePreviewImage] = useState<string | null>(null);
+
+  if (!description) {
+    return <span className="italic text-zinc-400">No description provided yet.</span>;
+  }
+
+  const { cleanText, images } = parseDescriptionImages(description);
+
+  return (
+    <div className="space-y-3">
+      {cleanText && (
+        <p className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 font-medium">
+          {cleanText}
+        </p>
+      )}
+
+      {images.length > 0 && (
+        <div className="space-y-1.5 pt-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1">
+            <ImageIcon className="w-3 h-3 text-brand-secondary" />
+            <span>Attached Images ({images.length})</span>
+          </span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {images.map((img, idx) => (
+              <div 
+                key={idx} 
+                className="relative group rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 shadow-sm aspect-video flex items-center justify-center"
+              >
+                <img 
+                  src={img.url} 
+                  alt={img.alt} 
+                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105 cursor-pointer"
+                  onClick={() => setActivePreviewImage(img.url)}
+                />
+                <div 
+                  className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => setActivePreviewImage(img.url)}
+                >
+                  <Button size="icon" variant="secondary" className="h-7 w-7 rounded-full bg-white/90 text-zinc-900 hover:bg-white shadow-md">
+                    <Eye className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                {onRemoveImage && (
+                  <Button 
+                    size="icon" 
+                    variant="destructive" 
+                    className="absolute top-1 right-1 h-5 w-5 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveImage(img.url);
+                    }}
+                    title="Remove image"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Full Image Preview Dialog */}
+      <Dialog open={!!activePreviewImage} onOpenChange={(open) => !open && setActivePreviewImage(null)}>
+        <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-2 bg-zinc-950/95 border-zinc-800 rounded-2xl flex items-center justify-center overflow-hidden">
+          {activePreviewImage && (
+            <div className="relative max-w-full max-h-[85vh] flex flex-col items-center justify-center">
+              <img 
+                src={activePreviewImage} 
+                alt="Enlarged view" 
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              />
+              <div className="flex items-center gap-3 mt-3">
+                <a 
+                  href={activePreviewImage} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="text-xs font-bold text-white bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Open Full Image
+                </a>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setActivePreviewImage(null)}
+                  className="text-xs font-bold border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DescriptionImageUploader({ 
+  onAddImage 
+}: { 
+  onAddImage: (imageUrl: string) => void;
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size exceeds 5MB limit.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          onAddImage(dataUrl);
+          toast.success('Image attached to task description!');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePromptUrl = () => {
+    const url = window.prompt('Enter image URL (e.g. https://domain.com/image.png):');
+    if (url && url.trim()) {
+      onAddImage(url.trim());
+      toast.success('Image URL added!');
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept="image/*" 
+        className="hidden" 
+      />
+      <Button 
+        type="button" 
+        variant="outline" 
+        size="sm" 
+        onClick={() => fileInputRef.current?.click()}
+        className="h-7 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded-lg flex items-center gap-1 cursor-pointer"
+      >
+        <ImageIcon className="w-3 h-3 text-brand-secondary" />
+        <span>Attach Local Image</span>
+      </Button>
+      <Button 
+        type="button" 
+        variant="outline" 
+        size="sm" 
+        onClick={handlePromptUrl}
+        className="h-7 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 rounded-lg flex items-center gap-1 cursor-pointer"
+      >
+        <LinkIcon className="w-3 h-3 text-zinc-500" />
+        <span>Image URL</span>
+      </Button>
+    </div>
+  );
+}
+
+function SubtaskInput({ 
+  taskId, 
+  onAddSubtask 
+}: { 
+  taskId: string; 
+  onAddSubtask: (taskId: string, name: string, assigneeIds?: string[], description?: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [showDescription, setShowDescription] = useState(false);
+
+  const handleAdd = () => {
+    if (!name.trim()) return;
+    onAddSubtask(taskId, name.trim(), [], description.trim() || undefined);
+    setName('');
+    setDescription('');
+    setShowDescription(false);
+  };
+
+  return (
+    <div className="space-y-2 pt-2">
+      <div className="flex items-center space-x-2">
+        <div className="relative flex-1">
+          <Input 
+            placeholder="Add sub-task..." 
+            className="h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-7 focus-visible:ring-brand-secondary/20"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+          />
+          <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-8 px-2 text-[10px] font-bold rounded-lg border-zinc-200 dark:border-zinc-800 flex items-center gap-1 shrink-0 cursor-pointer",
+            showDescription || description ? "bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30" : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+          )}
+          onClick={() => setShowDescription(!showDescription)}
+          title="Add optional subtask description"
+        >
+          <FileText className="w-3 h-3 text-brand-secondary" />
+          <span>{description ? "Description Added" : "+ Description"}</span>
+        </Button>
+
+        {name.trim() && (
+          <Button 
+            type="button"
+            size="sm" 
+            className="h-8 text-xs font-bold bg-brand-secondary text-white hover:bg-brand-secondary/90 shrink-0 px-3 rounded-lg cursor-pointer"
+            onClick={handleAdd}
+          >
+            Add
+          </Button>
+        )}
+      </div>
+
+      {(showDescription || description) && (
+        <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1">
+              <FileText className="w-3 h-3 text-brand-secondary" />
+              <span>Subtask Description (Optional)</span>
+            </span>
+            <DescriptionImageUploader 
+              onAddImage={(imgUrl) => {
+                setDescription(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
+              }}
+            />
+          </div>
+          <Textarea
+            placeholder="Add detailed instructions, notes, or image links for this subtask..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="text-xs bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 min-h-[50px] resize-y rounded-lg p-2"
+          />
+          {description && (
+            <div className="pt-1">
+              <TaskDescriptionRenderer 
+                description={description} 
+                onRemoveImage={(imgUrl) => {
+                  setDescription(prev => prev ? prev.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : '');
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditableSubtaskRow({
+  subtask,
+  taskId,
+  users,
+  onToggle,
+  onUpdateStatus,
+  onUpdateAssignees,
+  onUpdateSubtask,
+  onDelete,
+  subTaskElapsedTimes,
+  activeTimerSubTaskId,
+  toggleSubTaskTimer,
+  handleDurationInputChange,
+  handleDurationInputBlur,
+  inputDrafts,
+  inputErrors,
+  formatTime,
+  formatHoursMinutes
+}: {
+  key?: string;
+  subtask: SubTask;
+  taskId: string;
+  users: UserProfile[];
+  onToggle: (taskId: string, subtaskId: string) => void;
+  onUpdateStatus: (taskId: string, subtaskId: string, status: TaskStatus) => void;
+  onUpdateAssignees: (taskId: string, subtaskId: string, assigneeIds: string[]) => void;
+  onUpdateSubtask: (taskId: string, subtaskId: string, updates: Partial<SubTask>) => void;
+  onDelete: (taskId: string, subtaskId: string) => void;
+  subTaskElapsedTimes?: Record<string, number>;
+  activeTimerSubTaskId?: string | null;
+  toggleSubTaskTimer?: (subtaskId: string, taskId: string) => void;
+  handleDurationInputChange?: (taskId: string, subtaskId: string, field: 'timeEstimate' | 'timeLogged', value: string) => void;
+  handleDurationInputBlur?: (taskId: string, subtaskId: string, field: 'timeEstimate' | 'timeLogged') => void;
+  inputDrafts?: Record<string, string>;
+  inputErrors?: Record<string, boolean>;
+  formatTime?: (seconds: number) => string;
+  formatHoursMinutes?: (hoursFloat: number | undefined) => string;
+}) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(subtask.name);
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [descInput, setDescInput] = useState(subtask.description || '');
+
+  useEffect(() => {
+    setNameInput(subtask.name);
+  }, [subtask.name]);
+
+  useEffect(() => {
+    setDescInput(subtask.description || '');
+  }, [subtask.description]);
+
+  const handleSaveName = () => {
+    if (nameInput.trim() && nameInput.trim() !== subtask.name) {
+      onUpdateSubtask(taskId, subtask.id, { name: nameInput.trim() });
+      toast.success('Subtask name updated');
+    }
+    setIsEditingName(false);
+  };
+
+  const handleSaveDesc = () => {
+    onUpdateSubtask(taskId, subtask.id, { description: descInput.trim() || undefined });
+    toast.success('Subtask description updated');
+    setIsEditingDesc(false);
+  };
+
+  const showTimerControls = toggleSubTaskTimer && formatTime && formatHoursMinutes;
+
+  return (
+    <div 
+      className="bg-white dark:bg-zinc-950 p-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm group/st space-y-2 text-xs"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Row 1: Checkbox + Name / Edit Input + Top Right Quick Actions */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <Checkbox 
+            checked={subtask.isCompleted} 
+            onCheckedChange={() => onToggle(taskId, subtask.id)}
+            className="brand-checkbox shrink-0 mt-0.5"
+          />
+
+          {isEditingName ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <Input 
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') setIsEditingName(false);
+                }}
+                autoFocus
+                className="h-7 text-xs bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 py-0 px-2 focus-visible:ring-brand-secondary/20 flex-1 min-w-0"
+                placeholder="Enter subtask name..."
+              />
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 shrink-0" onClick={handleSaveName} title="Save name">
+                <Check className="w-3.5 h-3.5" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 shrink-0" onClick={() => setIsEditingName(false)} title="Cancel">
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div 
+              className="flex items-center gap-1.5 flex-1 min-w-0 group/name cursor-pointer py-0.5" 
+              onClick={() => { setNameInput(subtask.name); setIsEditingName(true); }}
+              title="Click to edit subtask name"
+            >
+              <span className={cn(
+                "text-xs font-semibold text-zinc-800 dark:text-zinc-200 leading-snug break-words flex-1 min-w-0",
+                subtask.isCompleted ? "text-zinc-400 dark:text-zinc-500 line-through" : ""
+              )}>
+                {subtask.name}
+              </span>
+              <Pencil className="w-3 h-3 text-zinc-400 opacity-0 group-hover/st:opacity-100 group-hover/name:text-brand-secondary transition-opacity shrink-0" />
+            </div>
+          )}
+        </div>
+
+        {/* Top Right Quick Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-6 px-2 text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1",
+              subtask.description ? "text-brand-secondary bg-brand-secondary/10 border border-brand-secondary/20" : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            )}
+            onClick={() => {
+              setDescInput(subtask.description || '');
+              setIsEditingDesc(!isEditingDesc);
+            }}
+            title={subtask.description ? "Edit subtask description" : "Add description to subtask"}
+          >
+            <FileText className="w-3 h-3 text-brand-secondary" />
+            <span>{subtask.description ? "Description" : "+ Description"}</span>
+          </Button>
+
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-opacity cursor-pointer shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(taskId, subtask.id);
+            }}
+            title="Delete subtask"
+          >
+            <Trash2 className="w-3 h-3 text-red-400" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Row 2: Metadata - Assignees, Status, and optional Timer controls */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-900">
+        <div className="flex items-center gap-2 flex-wrap">
+          <SubtaskAssigneesPicker
+            subtask={subtask}
+            taskId={taskId}
+            users={users}
+            onUpdateAssignees={onUpdateAssignees}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {showTimerControls && (
+            <div className="flex items-center space-x-1.5 bg-zinc-50 dark:bg-zinc-900 px-2 py-0.5 rounded-lg border border-zinc-100/60 dark:border-zinc-800">
+              <div className="flex items-center space-x-1 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
+                <span className="font-mono text-[10px] text-zinc-500 font-semibold">
+                  {formatTime!(subTaskElapsedTimes?.[subtask.id] || 0)}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-4 w-4 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSubTaskTimer!(subtask.id, taskId);
+                  }}
+                >
+                  {activeTimerSubTaskId === subtask.id ? (
+                    <Pause className="w-2.5 h-2.5 text-orange-500 fill-current animate-pulse" />
+                  ) : (
+                    <Play className="w-2.5 h-2.5 text-zinc-400 hover:text-emerald-500 fill-current" />
+                  )}
+                </Button>
+              </div>
+
+              {handleDurationInputChange && handleDurationInputBlur && inputDrafts && inputErrors && (
+                <>
+                  <div className="flex items-center space-x-1 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
+                    <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
+                    <input
+                      type="text"
+                      placeholder="00:00"
+                      value={
+                        inputDrafts[`est-${subtask.id}`] !== undefined
+                          ? inputDrafts[`est-${subtask.id}`]
+                          : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
+                              ? formatHoursMinutes!(subtask.timeEstimate)
+                              : '')
+                      }
+                      onChange={(e) => handleDurationInputChange(taskId, subtask.id, 'timeEstimate', e.target.value)}
+                      onBlur={() => handleDurationInputBlur(taskId, subtask.id, 'timeEstimate')}
+                      className={cn(
+                        "w-11 h-4 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                        inputErrors[`est-${subtask.id}`] 
+                          ? "border-red-500 text-red-600 focus:ring-red-500/30" 
+                          : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex items-center space-x-1">
+                    <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
+                    <input
+                      type="text"
+                      placeholder="00:00"
+                      value={
+                        inputDrafts[`spent-${subtask.id}`] !== undefined
+                          ? inputDrafts[`spent-${subtask.id}`]
+                          : (subtask.timeLogged !== undefined && subtask.timeLogged !== 0
+                              ? formatHoursMinutes!(subtask.timeLogged)
+                              : (subTaskElapsedTimes?.[subtask.id]
+                                  ? formatHoursMinutes!(subTaskElapsedTimes[subtask.id] / 3600)
+                                  : '')
+                            )
+                      }
+                      onChange={(e) => handleDurationInputChange(taskId, subtask.id, 'timeLogged', e.target.value)}
+                      onBlur={() => handleDurationInputBlur(taskId, subtask.id, 'timeLogged')}
+                      className={cn(
+                        "w-11 h-4 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
+                        inputErrors[`spent-${subtask.id}`] 
+                          ? "border-red-500 text-red-600 focus:ring-red-500/30" 
+                          : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
+                      )}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <SubtaskStatusBox 
+            subtask={subtask}
+            taskId={taskId}
+            onUpdateStatus={onUpdateStatus}
+          />
+        </div>
+      </div>
+
+      {/* Description Section */}
+      {(subtask.description || isEditingDesc) && (
+        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900 space-y-2">
+          {isEditingDesc ? (
+            <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-brand-secondary" />
+                  <span>Subtask Description</span>
+                </span>
+                <DescriptionImageUploader
+                  onAddImage={(imgUrl) => {
+                    setDescInput(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
+                  }}
+                />
+              </div>
+              <Textarea 
+                value={descInput}
+                onChange={(e) => setDescInput(e.target.value)}
+                placeholder="Add detailed instructions, links, or notes for this subtask..."
+                className="text-xs bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 min-h-[60px] resize-y rounded-lg p-2 focus-visible:ring-brand-secondary/20"
+              />
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[10px] px-2.5"
+                  onClick={() => setIsEditingDesc(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 text-[10px] px-3 bg-brand-secondary text-white hover:bg-brand-secondary/90 font-bold"
+                  onClick={handleSaveDesc}
+                >
+                  Save Description
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div 
+              className="p-2.5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl text-xs text-zinc-700 dark:text-zinc-300 group/desc cursor-pointer hover:border-brand-secondary/30 transition-colors"
+              onClick={() => {
+                setDescInput(subtask.description || '');
+                setIsEditingDesc(true);
+              }}
+              title="Click to edit description"
+            >
+              <div className="flex items-center justify-between text-[10px] text-zinc-400 font-medium mb-1">
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-brand-secondary" />
+                  <span>Subtask Description</span>
+                </span>
+                <Pencil className="w-2.5 h-2.5 text-zinc-400 opacity-0 group-hover/desc:opacity-100" />
+              </div>
+              <TaskDescriptionRenderer 
+                description={subtask.description} 
+                onRemoveImage={(imgUrl) => {
+                  const newDesc = subtask.description?.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '');
+                  onUpdateSubtask(taskId, subtask.id, { description: newDesc?.trim() || undefined });
+                  toast.success('Removed image from subtask');
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TaskEngine({ 
   filterProjectId, 
@@ -1640,6 +2484,7 @@ export function TaskEngine({
         id: 'st_c_' + Math.random().toString(36).substr(2, 9),
         taskId: selectedParentTaskId,
         name: newTask.name,
+        description: newTask.description?.trim() || undefined,
         isCompleted: false,
         createdAt: new Date().toISOString(),
         assigneeId: newTask.assigneeId || '',
@@ -2089,7 +2934,35 @@ export function TaskEngine({
     );
   };
 
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [descInput, setDescInput] = useState('');
+
+  const logTaskActivity = (taskId: string, action: string, details?: string) => {
+    const newActivity: TaskActivity = {
+      id: 'act-' + Math.random().toString(36).substring(2, 9),
+      taskId,
+      userId: user?.id || 'system',
+      userName: user?.name || 'System User',
+      userAvatar: user?.avatarUrl,
+      action,
+      details,
+      timestamp: new Date().toISOString()
+    };
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          activities: [newActivity, ...(t.activities || [])],
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
+  };
+
   const toggleSubtask = (taskId: string, subtaskId: string) => {
+    let subtaskName = 'Subtask';
+    let isDone = false;
     setTasks(prev => prev.map(t => {
       if (t.id === taskId && t.subTasks) {
         return {
@@ -2097,6 +2970,8 @@ export function TaskEngine({
           subTasks: t.subTasks.map(st => {
             if (st.id === subtaskId) {
               const nextCompleted = !st.isCompleted;
+              subtaskName = st.name;
+              isDone = nextCompleted;
               return { 
                 ...st, 
                 isCompleted: nextCompleted,
@@ -2104,26 +2979,87 @@ export function TaskEngine({
               };
             }
             return st;
-          })
+          }),
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     }));
+    logTaskActivity(taskId, 'Subtask Updated', `Marked subtask "${subtaskName}" as ${isDone ? 'Done' : 'Open'}`);
   };
 
   const updateSubtaskStatus = (taskId: string, subtaskId: string, status: TaskStatus) => {
     const isCompleted = status === TaskStatus.DONE || status === TaskStatus.APPROVED;
+    let subtaskName = 'Subtask';
     setTasks(prev => prev.map(t => {
       if (t.id === taskId && t.subTasks) {
+        const found = t.subTasks.find(st => st.id === subtaskId);
+        if (found) subtaskName = found.name;
         return {
           ...t,
           subTasks: t.subTasks.map(st => 
             st.id === subtaskId ? { ...st, status, isCompleted } : st
-          )
+          ),
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     }));
+    logTaskActivity(taskId, 'Subtask Status Moved', `Moved subtask "${subtaskName}" status to ${status}`);
+  };
+
+  const updateSubtaskAssignees = (taskId: string, subtaskId: string, assigneeIds: string[]) => {
+    let subtaskName = 'Subtask';
+    const parentTask = tasks.find(t => t.id === taskId);
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId && t.subTasks) {
+        return {
+          ...t,
+          subTasks: t.subTasks.map(st => {
+            if (st.id === subtaskId) {
+              subtaskName = st.name;
+              return {
+                ...st,
+                assigneeIds,
+                assigneeId: assigneeIds[0] || ''
+              };
+            }
+            return st;
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
+    const assignedUsers = users.filter(u => assigneeIds.includes(u.id));
+    const names = assignedUsers.map(u => u.name).join(', ') || 'Unassigned';
+    logTaskActivity(taskId, 'Subtask Reassigned', `Assigned subtask "${subtaskName}" to ${names}`);
+
+    // Dispatch email notification to assigned users and assigner (user)
+    if (user && assignedUsers.length > 0 && parentTask) {
+      assignedUsers.forEach(assignee => {
+        const dummyTask: Task = {
+          id: taskId,
+          projectId: parentTask.projectId,
+          deliverableId: parentTask.deliverableId,
+          name: `${parentTask.name} - Subtask: ${subtaskName}`,
+          type: parentTask.type,
+          assigneeId: assignee.id,
+          status: parentTask.status,
+          priority: parentTask.priority,
+          dueDate: parentTask.dueDate,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        try {
+          emailService.sendTaskAssignmentEmail(assignee, dummyTask, user);
+        } catch (e) {
+          console.error("Subtask email notification failed", e);
+        }
+      });
+    }
+
+    toast.success(`Updated assigned persons for subtask "${subtaskName}"`);
   };
 
   const updateSubtask = (taskId: string, subtaskId: string, updates: Partial<SubTask>) => {
@@ -2133,45 +3069,56 @@ export function TaskEngine({
           ...t,
           subTasks: t.subTasks.map(st => 
             st.id === subtaskId ? { ...st, ...updates } : st
-          )
+          ),
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     }));
   };
 
-  const addSubtask = (taskId: string, name: string) => {
+  const addSubtask = (taskId: string, name: string, assigneeIds: string[] = [], description?: string) => {
     if (!name.trim()) return;
     const newSubtask: SubTask = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: 'st-' + Math.random().toString(36).substring(2, 9),
       taskId,
-      name,
+      name: name.trim(),
+      description: description?.trim() || undefined,
       isCompleted: false,
       createdAt: new Date().toISOString(),
-      status: TaskStatus.OPEN
+      status: TaskStatus.OPEN,
+      assigneeIds: assigneeIds,
+      assigneeId: assigneeIds[0] || ''
     };
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
         return {
           ...t,
-          subTasks: [...(t.subTasks || []), newSubtask]
+          subTasks: [...(t.subTasks || []), newSubtask],
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     }));
+    logTaskActivity(taskId, 'Subtask Created', `Added subtask "${name.trim()}"`);
   };
 
   const deleteSubtask = (taskId: string, subtaskId: string) => {
+    let subtaskName = 'Subtask';
     setTasks(prev => prev.map(t => {
       if (t.id === taskId && t.subTasks) {
+        const found = t.subTasks.find(st => st.id === subtaskId);
+        if (found) subtaskName = found.name;
         return {
           ...t,
-          subTasks: t.subTasks.filter(st => st.id !== subtaskId)
+          subTasks: t.subTasks.filter(st => st.id !== subtaskId),
+          updatedAt: new Date().toISOString()
         };
       }
       return t;
     }));
+    logTaskActivity(taskId, 'Subtask Deleted', `Removed subtask "${subtaskName}"`);
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -2938,13 +3885,36 @@ export function TaskEngine({
                 />
               </div>
               <div className="grid gap-2">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Description (Optional)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Description (Optional)</Label>
+                  <DescriptionImageUploader 
+                    onAddImage={(imgUrl) => {
+                      setNewTask(prev => ({
+                        ...prev,
+                        description: (prev.description || '') + `\n![Image](${imgUrl})\n`
+                      }));
+                    }}
+                  />
+                </div>
                 <Textarea 
-                  placeholder="Provide context for better AI assignment..." 
+                  placeholder="Provide context or paste image links..." 
                   className="rounded-xl border-zinc-200 resize-none h-20"
                   value={newTask.description}
                   onChange={(e) => setNewTask({...newTask, description: e.target.value})}
                 />
+                {newTask.description && (
+                  <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                    <TaskDescriptionRenderer 
+                      description={newTask.description}
+                      onRemoveImage={(imgUrl) => {
+                        setNewTask(prev => ({
+                          ...prev,
+                          description: prev.description ? prev.description.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : ''
+                        }));
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -4110,10 +5080,11 @@ export function TaskEngine({
                       <Select 
                         value={task.assigneeId} 
                         onValueChange={(newAssigneeId) => {
-                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assigneeId: newAssigneeId } : t));
+                          const updatedTask = { ...task, assigneeId: newAssigneeId, updatedAt: new Date().toISOString() };
+                          setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
                           const targetAssignee = users.find(u => u.id === newAssigneeId);
                           if (targetAssignee && user) {
-                            emailService.sendTaskAssignmentEmail(targetAssignee, task, user);
+                            emailService.sendTaskAssignmentEmail(targetAssignee, updatedTask, user);
                           }
                         }}
                       >
@@ -4369,195 +5340,37 @@ export function TaskEngine({
                                       <div 
                                         className="h-full bg-brand-secondary transition-all duration-500" 
                                         style={{ width: `${(completedCount / (subtaskCount || 1)) * 100}%` }}
-                                       />
-                                    </div>
-                                 </div>
-                               </div>
-
-                               <div className="space-y-2">
-                                {task.subTasks?.map((subtask) => (
-                                  <div 
-                                    key={subtask.id} 
-                                    className="flex items-center justify-between bg-white dark:bg-zinc-950 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 group/st shadow-sm"
-                                  >
-                                    <div className="flex items-center space-x-3">
-                                      <Checkbox 
-                                        checked={subtask.isCompleted} 
-                                        onCheckedChange={() => toggleSubtask(task.id, subtask.id)}
-                                        className="brand-checkbox"
                                       />
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        <span className={cn(
-                                          "text-sm font-medium transition-all",
-                                          subtask.isCompleted ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-700 dark:text-zinc-300"
-                                        )}>
-                                          {subtask.name}
-                                        </span>
-                                        {(() => {
-                                          const subtaskAssignee = subtask.assigneeId ? users.find(u => u.id === subtask.assigneeId) : null;
-                                          if (!subtaskAssignee) return null;
-                                          return (
-                                            <span className="inline-flex items-center gap-1 text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-extrabold px-1.5 py-0.5 rounded-md border border-purple-500/20" title={`Assigned to ${subtaskAssignee.name}`}>
-                                              <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 flex items-center justify-center text-[7px] font-black uppercase text-purple-700 dark:text-purple-300">
-                                                {subtaskAssignee.name.charAt(0)}
-                                              </span>
-                                              <span>{subtaskAssignee.name.split(' ')[0]}</span>
-                                            </span>
-                                          );
-                                        })()}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      {/* Subtask Timer Controls & Timing Inputs */}
-                                      <div className="flex items-center space-x-2 bg-zinc-50 dark:bg-zinc-900 px-2 py-1 rounded-lg border border-zinc-100/60 dark:border-zinc-800">
-                                        {/* Timer/Elapsed */}
-                                        <div className="flex items-center space-x-1.5 border-r border-zinc-200 dark:border-zinc-800 pr-2">
-                                          <span className="font-mono text-[10px] text-zinc-500 font-semibold" title="Live timer duration">
-                                            {formatTime(subTaskElapsedTimes[subtask.id] || 0)}
-                                          </span>
-                                          <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-5 w-5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-800 shrink-0"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleSubTaskTimer?.(subtask.id, task.id);
-                                            }}
-                                          >
-                                            {activeTimerSubTaskId === subtask.id ? (
-                                              <Pause className="w-2.5 h-2.5 text-orange-500 fill-current animate-pulse" />
-                                            ) : (
-                                              <Play className="w-2.5 h-2.5 text-zinc-400 hover:text-emerald-500 fill-current" />
-                                            )}
-                                          </Button>
-                                        </div>
-
-                                        {/* Spent (Logged) Time */}
-                                        <div className="flex items-center space-x-1 pl-2 border-r border-zinc-200 dark:border-zinc-800 pr-2">
-                                          <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
-                                          <input
-                                            type="text"
-                                            placeholder="00:00"
-                                            value={
-                                              inputDrafts[`est-${subtask.id}`] !== undefined
-                                                ? inputDrafts[`est-${subtask.id}`]
-                                                : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
-                                                    ? formatHoursMinutes(subtask.timeEstimate)
-                                                    : '')
-                                            }
-                                            onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                            onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                            className={cn(
-                                              "w-12 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                              inputErrors[`est-${subtask.id}`] 
-                                                ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                            )}
-                                            title={
-                                              inputErrors[`est-${subtask.id}`]
-                                                ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
-                                                : "Manually set estimated/allocated time (e.g. 1h, 45m)"
-                                            }
-                                          />
-                                        </div>
-
-                                        <div className="flex items-center space-x-1 pl-2">
-                                          <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
-                                          <input
-                                            type="text"
-                                            placeholder="00:00"
-                                            value={
-                                              inputDrafts[`spent-${subtask.id}`] !== undefined
-                                                ? inputDrafts[`spent-${subtask.id}`]
-                                                : (subtask.timeLogged !== undefined && subtask.timeLogged !== 0
-                                                    ? formatHoursMinutes(subtask.timeLogged)
-                                                    : (subTaskElapsedTimes[subtask.id]
-                                                        ? formatHoursMinutes(subTaskElapsedTimes[subtask.id] / 3600)
-                                                        : '')
-                                                  )
-                                            }
-                                            onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
-                                            onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
-                                            className={cn(
-                                              "w-12 h-5 text-[10px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                              inputErrors[`spent-${subtask.id}`] 
-                                                ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                            )}
-                                            title={
-                                              inputErrors[`spent-${subtask.id}`]
-                                                ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                                : "Manually adjust logged time format (e.g. 01:30, 45, 1h 30m)"
-                                            }
-                                          />
-                                        </div>
-                                      </div>
-
-                                      <Select 
-                                        value={subtask.status || (subtask.isCompleted ? TaskStatus.DONE : TaskStatus.OPEN)} 
-                                        onValueChange={(newStatus) => {
-                                          updateSubtaskStatus(task.id, subtask.id, newStatus as TaskStatus);
-                                        }}
-                                      >
-                                        <SelectTrigger className={cn(
-                                          "h-6 px-1.5 text-[8px] font-bold uppercase tracking-wider rounded-lg border transition-all w-[90px] cursor-pointer",
-                                          (subtask.status === TaskStatus.OPEN || (!subtask.status && !subtask.isCompleted)) && "bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800",
-                                          subtask.status === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30",
-                                          subtask.status === TaskStatus.REVIEW && "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30",
-                                          subtask.status === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-600 border-teal-100 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/30",
-                                          subtask.status === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30",
-                                          subtask.status === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/30",
-                                          (subtask.status === TaskStatus.DONE || (!subtask.status && subtask.isCompleted)) && "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30",
-                                          subtask.status === TaskStatus.BLOCKED && "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30",
-                                          subtask.status === TaskStatus.CANCELLED && "bg-red-50 text-red-600 border-red-105 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/30"
-                                        )}>
-                                          <SelectValue placeholder="Status" />
-                                        </SelectTrigger>
-                                        <SelectContent className="rounded-xl border-zinc-200">
-                                          <SelectItem value={TaskStatus.OPEN} className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50 dark:text-zinc-400">Open</SelectItem>
-                                          <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[9px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50 dark:text-blue-400">In Progress</SelectItem>
-                                          <SelectItem value={TaskStatus.REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50 dark:text-amber-400">Review</SelectItem>
-                                          <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50 dark:text-teal-400">Client Review</SelectItem>
-                                          <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[9px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50 dark:text-purple-400">Revision Requested</SelectItem>
-                                          <SelectItem value={TaskStatus.APPROVED} className="text-[9px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50 dark:text-indigo-400">Approved</SelectItem>
-                                          <SelectItem value={TaskStatus.DONE} className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50 dark:text-emerald-400">Done</SelectItem>
-                                          <SelectItem value={TaskStatus.BLOCKED} className="text-[9px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50 dark:text-rose-400">Blocked</SelectItem>
-                                          <SelectItem value={TaskStatus.CANCELLED} className="text-[9px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50 dark:text-red-400">Cancelled</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-7 w-7 opacity-0 group-hover/st:opacity-100 transition-opacity"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          deleteSubtask(task.id, subtask.id);
-                                        }}
-                                      >
-                                        <Trash2 className="w-3 h-3 text-red-400" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
-
-                                <div className="flex items-center space-x-2 pt-2">
-                                  <div className="relative flex-1">
-                                    <Input 
-                                      placeholder="Add sub-task..." 
-                                      className="h-9 bg-white border-zinc-200 text-xs pl-8 focus-visible:ring-brand-secondary/20"
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          addSubtask(task.id, (e.target as HTMLInputElement).value);
-                                          (e.target as HTMLInputElement).value = '';
-                                        }
-                                      }}
-                                    />
-                                    <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400" />
-                                  </div>
-                                  <p className="text-[10px] text-zinc-400 font-medium italic">Press Enter to add</p>
+                                   </div>
                                 </div>
                               </div>
+
+                              <div className="space-y-2">
+                                {task.subTasks?.map((subtask) => (
+                                  <EditableSubtaskRow
+                                     key={subtask.id}
+                                     subtask={subtask}
+                                     taskId={task.id}
+                                     users={users}
+                                     onToggle={toggleSubtask}
+                                     onUpdateStatus={updateSubtaskStatus}
+                                     onUpdateAssignees={updateSubtaskAssignees}
+                                     onUpdateSubtask={updateSubtask}
+                                     onDelete={deleteSubtask}
+                                     subTaskElapsedTimes={subTaskElapsedTimes}
+                                     activeTimerSubTaskId={activeTimerSubTaskId}
+                                     toggleSubTaskTimer={toggleSubTaskTimer}
+                                     handleDurationInputChange={handleDurationInputChange}
+                                     handleDurationInputBlur={handleDurationInputBlur}
+                                     inputDrafts={inputDrafts}
+                                     inputErrors={inputErrors}
+                                     formatTime={formatTime}
+                                     formatHoursMinutes={formatHoursMinutes}
+                                   />
+                                 ))}
+
+                                 <SubtaskInput taskId={task.id} onAddSubtask={(tId, name, assignees, desc) => addSubtask(tId, name, assignees, desc)} />
+                               </div>
 
                               {/* Automated Handoff Pipeline Progression Stepper */}
                               {task.workflowSteps && task.workflowSteps.length > 0 && (
@@ -4977,87 +5790,28 @@ export function TaskEngine({
                                 <div className="text-[9px] font-black uppercase tracking-wider text-zinc-400 mb-1.5">SUBTASK CHECKLIST</div>
                                 <div className="space-y-2">
                                   {task.subTasks?.map((subtask) => (
-                                    <div 
-                                      key={subtask.id} 
-                                      className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 shadow-sm"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                          checked={subtask.isCompleted} 
-                                          onCheckedChange={() => toggleSubtask(task.id, subtask.id)}
-                                          className="brand-checkbox"
-                                        />
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <span className={cn(
-                                            "text-xs font-semibold text-zinc-700 dark:text-zinc-300",
-                                            subtask.isCompleted ? "text-zinc-400 dark:text-zinc-600 line-through" : ""
-                                          )}>
-                                            {subtask.name}
-                                          </span>
-                                          {(() => {
-                                            const subtaskAssignee = subtask.assigneeId ? users.find(u => u.id === subtask.assigneeId) : null;
-                                            if (!subtaskAssignee) return null;
-                                            return (
-                                              <span className="inline-flex items-center gap-1 text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-extrabold px-1.5 py-0.5 rounded-md border border-purple-500/20" title={`Assigned to ${subtaskAssignee.name}`}>
-                                                <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 flex items-center justify-center text-[7px] font-black uppercase text-purple-700 dark:text-purple-300">
-                                                  {subtaskAssignee.name.charAt(0)}
-                                                </span>
-                                                <span>{subtaskAssignee.name.split(' ')[0]}</span>
-                                              </span>
-                                            );
-                                          })()}
-                                        </div>
-                                      </div>
-
-                                      <Select 
-                                        value={subtask.status || (subtask.isCompleted ? TaskStatus.DONE : TaskStatus.OPEN)} 
-                                        onValueChange={(newStatus) => {
-                                          updateSubtaskStatus(task.id, subtask.id, newStatus as TaskStatus);
-                                        }}
-                                      >
-                                        <SelectTrigger className={cn(
-                                          "h-6 px-1.5 text-[8px] font-bold uppercase tracking-wider rounded-lg border transition-all w-[90px] cursor-pointer shrink-0 ml-2",
-                                          (subtask.status === TaskStatus.OPEN || (!subtask.status && !subtask.isCompleted)) && "bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800",
-                                          subtask.status === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30",
-                                          subtask.status === TaskStatus.REVIEW && "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30",
-                                          subtask.status === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-600 border-teal-100 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/30",
-                                          subtask.status === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30",
-                                          subtask.status === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/30",
-                                          (subtask.status === TaskStatus.DONE || (!subtask.status && subtask.isCompleted)) && "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30",
-                                          subtask.status === TaskStatus.BLOCKED && "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30",
-                                          subtask.status === TaskStatus.CANCELLED && "bg-red-50 text-red-600 border-red-105 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/30"
-                                        )}>
-                                          <SelectValue placeholder="Status" />
-                                        </SelectTrigger>
-                                        <SelectContent className="rounded-xl border-zinc-200">
-                                          <SelectItem value={TaskStatus.OPEN} className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50 dark:text-zinc-400">Open</SelectItem>
-                                          <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[9px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50 dark:text-blue-400">In Progress</SelectItem>
-                                          <SelectItem value={TaskStatus.REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50 dark:text-amber-400">Review</SelectItem>
-                                          <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50 dark:text-teal-400">Client Review</SelectItem>
-                                          <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[9px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50 dark:text-purple-400">Revision Requested</SelectItem>
-                                          <SelectItem value={TaskStatus.APPROVED} className="text-[9px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50 dark:text-indigo-400">Approved</SelectItem>
-                                          <SelectItem value={TaskStatus.DONE} className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50 dark:text-emerald-400">Done</SelectItem>
-                                          <SelectItem value={TaskStatus.BLOCKED} className="text-[9px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50 dark:text-rose-400">Blocked</SelectItem>
-                                          <SelectItem value={TaskStatus.CANCELLED} className="text-[9px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50 dark:text-red-400">Cancelled</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
+                                    <EditableSubtaskRow
+                                      key={subtask.id}
+                                      subtask={subtask}
+                                      taskId={task.id}
+                                      users={users}
+                                      onToggle={toggleSubtask}
+                                      onUpdateStatus={updateSubtaskStatus}
+                                      onUpdateAssignees={updateSubtaskAssignees}
+                                      onUpdateSubtask={updateSubtask}
+                                      onDelete={deleteSubtask}
+                                      subTaskElapsedTimes={subTaskElapsedTimes}
+                                      activeTimerSubTaskId={activeTimerSubTaskId}
+                                      toggleSubTaskTimer={toggleSubTaskTimer}
+                                      handleDurationInputChange={handleDurationInputChange}
+                                      handleDurationInputBlur={handleDurationInputBlur}
+                                      inputDrafts={inputDrafts}
+                                      inputErrors={inputErrors}
+                                      formatTime={formatTime}
+                                      formatHoursMinutes={formatHoursMinutes}
+                                    />
                                   ))}
-                                  <div className="flex items-center space-x-1 pt-1">
-                                    <div className="relative flex-1">
-                                      <Input 
-                                        placeholder="Add sub-task..." 
-                                        className="h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-7 focus-visible:ring-brand-secondary/20"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            addSubtask(task.id, (e.target as HTMLInputElement).value);
-                                            (e.target as HTMLInputElement).value = '';
-                                          }
-                                        }}
-                                      />
-                                      <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-                                    </div>
-                                  </div>
+                                  <SubtaskInput taskId={task.id} onAddSubtask={(tId, name, assignees, desc) => addSubtask(tId, name, assignees, desc)} />
                                 </div>
                               </motion.div>
                             )}
@@ -5174,6 +5928,19 @@ export function TaskEngine({
                               </span>
                             </div>
                             <div className="flex items-center space-x-1.5 shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 px-1.5 text-[9px] font-bold text-zinc-600 dark:text-zinc-300 hover:text-brand-secondary hover:bg-brand-secondary/10 rounded-md shrink-0 flex items-center gap-1 cursor-pointer mr-0.5 border border-zinc-200 dark:border-zinc-800"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedDetailTask(task);
+                                }}
+                                title="View & Edit Task Details"
+                              >
+                                <Eye className="w-3 h-3 text-brand-secondary" />
+                                <span>Details</span>
+                              </Button>
                               <span className={cn(
                                 "w-1.5 h-1.5 rounded-full",
                                 task.priority === Priority.HIGH || task.priority === Priority.CRITICAL ? "bg-red-500" : "bg-zinc-300 dark:bg-zinc-600"
@@ -5306,192 +6073,26 @@ export function TaskEngine({
                               >
                                 <div className="space-y-2">
                                   {task.description && (
-                                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 mb-2 font-medium">
-                                       {task.description}
+                                     <div className="text-[11px] bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800 mb-2 font-medium">
+                                       <TaskDescriptionRenderer description={task.description} />
                                      </div>
                                   )}
 
                                   {task.subTasks?.map((subtask) => (
-                                    <div 
-                                      key={subtask.id} 
-                                      className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 shadow-sm group/st"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <Checkbox 
-                                          checked={subtask.isCompleted} 
-                                          onCheckedChange={() => toggleSubtask(task.id, subtask.id)}
-                                          className="brand-checkbox"
-                                        />
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <span className={cn(
-                                            "text-xs font-semibold text-zinc-700 dark:text-zinc-300",
-                                            subtask.isCompleted ? "text-zinc-400 dark:text-zinc-600 line-through" : ""
-                                          )}>
-                                            {subtask.name}
-                                          </span>
-                                          {(() => {
-                                            const subtaskAssignee = subtask.assigneeId ? users.find(u => u.id === subtask.assigneeId) : null;
-                                            if (!subtaskAssignee) return null;
-                                            return (
-                                              <span className="inline-flex items-center gap-1 text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-extrabold px-1.5 py-0.5 rounded-md border border-purple-500/20" title={`Assigned to ${subtaskAssignee.name}`}>
-                                                <span className="w-3.5 h-3.5 rounded-full bg-purple-500/20 flex items-center justify-center text-[7px] font-black uppercase text-purple-700 dark:text-purple-300">
-                                                  {subtaskAssignee.name.charAt(0)}
-                                                </span>
-                                                <span>{subtaskAssignee.name.split(' ')[0]}</span>
-                                              </span>
-                                            );
-                                          })()}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center space-x-2">
-                                        {/* Subtask Timer Controls & Timing Inputs */}
-                                        <div className="flex items-center space-x-1.5 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md border border-zinc-200/50 dark:border-zinc-800">
-                                          {/* Timer/Elapsed */}
-                                          <div className="flex items-center space-x-1 pr-1.5 border-r border-zinc-200 dark:border-zinc-800">
-                                            <span className="font-mono text-[9px] text-zinc-500 font-semibold" title="Live timer duration">
-                                              {formatTime(subTaskElapsedTimes[subtask.id] || 0)}
-                                            </span>
-                                            <Button 
-                                              variant="ghost" 
-                                              size="icon" 
-                                              className="h-4.5 w-4.5 rounded-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 shrink-0"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleSubTaskTimer?.(subtask.id, task.id);
-                                              }}
-                                            >
-                                              {activeTimerSubTaskId === subtask.id ? (
-                                                <Pause className="w-2 h-2 text-orange-500 fill-current animate-pulse" />
-                                              ) : (
-                                                <Play className="w-2 h-2 text-zinc-400 hover:text-emerald-500 fill-current" />
-                                              )}
-                                            </Button>
-                                          </div>
-
-                                          {/* Spent (Logged) Time */}
-                                          <div className="flex items-center space-x-1 pl-1.5 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
-                                            <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
-                                            <input
-                                              type="text"
-                                              placeholder="00:00"
-                                              value={
-                                                inputDrafts[`est-${subtask.id}`] !== undefined
-                                                  ? inputDrafts[`est-${subtask.id}`]
-                                                  : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
-                                                      ? formatHoursMinutes(subtask.timeEstimate)
-                                                      : '')
-                                              }
-                                              onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                              onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                              className={cn(
-                                                "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                                inputErrors[`est-${subtask.id}`] 
-                                                  ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                  : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                              )}
-                                              title={
-                                                inputErrors[`est-${subtask.id}`]
-                                                  ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
-                                                  : "Manually set estimated/allocated time (e.g. 1h, 45m)"
-                                              }
-                                            />
-                                          </div>
-
-                                          <div className="flex items-center space-x-1 pl-1.5">
-                                            <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
-                                            <input
-                                              type="text"
-                                              placeholder="00:00"
-                                              value={
-                                                inputDrafts[`spent-${subtask.id}`] !== undefined
-                                                  ? inputDrafts[`spent-${subtask.id}`]
-                                                  : (subtask.timeLogged !== undefined && subtask.timeLogged !== 0
-                                                      ? formatHoursMinutes(subtask.timeLogged)
-                                                      : (subTaskElapsedTimes[subtask.id]
-                                                          ? formatHoursMinutes(subTaskElapsedTimes[subtask.id] / 3600)
-                                                          : '')
-                                                    )
-                                              }
-                                              onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
-                                              onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
-                                              className={cn(
-                                                "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                                inputErrors[`spent-${subtask.id}`] 
-                                                  ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                                  : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                              )}
-                                              title={
-                                                inputErrors[`spent-${subtask.id}`]
-                                                  ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                                  : "Manually adjust logged time format (e.g. 01:30, 45, 1h 30m)"
-                                              }
-                                            />
-                                          </div>
-                                        </div>
-
-                                        <Select 
-                                          value={subtask.status || (subtask.isCompleted ? TaskStatus.DONE : TaskStatus.OPEN)} 
-                                          onValueChange={(newStatus) => {
-                                            updateSubtaskStatus(task.id, subtask.id, newStatus as TaskStatus);
-                                          }}
-                                        >
-                                          <SelectTrigger className={cn(
-                                            "h-6 px-1.5 text-[8px] font-bold uppercase tracking-wider rounded-lg border transition-all w-[90px] cursor-pointer shrink-0",
-                                            (subtask.status === TaskStatus.OPEN || (!subtask.status && !subtask.isCompleted)) && "bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800",
-                                            subtask.status === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30",
-                                            subtask.status === TaskStatus.REVIEW && "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30",
-                                            subtask.status === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-600 border-teal-100 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/30",
-                                            subtask.status === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30",
-                                            subtask.status === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/30",
-                                            (subtask.status === TaskStatus.DONE || (!subtask.status && subtask.isCompleted)) && "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30",
-                                            subtask.status === TaskStatus.BLOCKED && "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30",
-                                            subtask.status === TaskStatus.CANCELLED && "bg-red-50 text-red-600 border-red-105 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/30"
-                                          )}>
-                                            <SelectValue placeholder="Status" />
-                                          </SelectTrigger>
-                                          <SelectContent className="rounded-xl border-zinc-200">
-                                            <SelectItem value={TaskStatus.OPEN} className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50 dark:text-zinc-400">Open</SelectItem>
-                                            <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[9px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50 dark:text-blue-400">In Progress</SelectItem>
-                                            <SelectItem value={TaskStatus.REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50 dark:text-amber-400">Review</SelectItem>
-                                            <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50 dark:text-teal-400">Client Review</SelectItem>
-                                            <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[9px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50 dark:text-purple-400">Revision Requested</SelectItem>
-                                            <SelectItem value={TaskStatus.APPROVED} className="text-[9px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50 dark:text-indigo-400">Approved</SelectItem>
-                                            <SelectItem value={TaskStatus.DONE} className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50 dark:text-emerald-400">Done</SelectItem>
-                                            <SelectItem value={TaskStatus.BLOCKED} className="text-[9px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50 dark:text-rose-400">Blocked</SelectItem>
-                                            <SelectItem value={TaskStatus.CANCELLED} className="text-[9px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50 dark:text-red-400">Cancelled</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-
-                                        <Button 
-                                          variant="ghost" 
-                                          size="icon" 
-                                          className="h-6 w-6 opacity-0 group-hover/st:opacity-100 transition-opacity"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteSubtask(task.id, subtask.id);
-                                          }}
-                                        >
-                                          <Trash2 className="w-2.5 h-2.5 text-red-400" />
-                                        </Button>
-                                      </div>
-                                    </div>
+                                    <EditableSubtaskRow
+                                      key={subtask.id}
+                                      subtask={subtask}
+                                      taskId={task.id}
+                                      users={users}
+                                      onToggle={toggleSubtask}
+                                      onUpdateStatus={updateSubtaskStatus}
+                                      onUpdateAssignees={updateSubtaskAssignees}
+                                      onUpdateSubtask={updateSubtask}
+                                      onDelete={deleteSubtask}
+                                    />
                                   ))}
 
-                                  <div className="flex items-center space-x-1 pt-1">
-                                    <div className="relative flex-1">
-                                      <Input 
-                                        placeholder="Add sub-task..." 
-                                        className="h-8 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-7 focus-visible:ring-brand-secondary/20"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            addSubtask(task.id, (e.target as HTMLInputElement).value);
-                                            (e.target as HTMLInputElement).value = '';
-                                          }
-                                        }}
-                                      />
-                                      <Plus className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-                                    </div>
-                                  </div>
+                                  <SubtaskInput taskId={task.id} onAddSubtask={(tId, name, assignees, desc) => addSubtask(tId, name, assignees, desc)} />
 
                                   {/* Compact Pipeline Progression Stepper for Card Drawer Layout */}
                                   {task.workflowSteps && task.workflowSteps.length > 0 && (
@@ -5644,10 +6245,11 @@ export function TaskEngine({
                             <Select 
                               value={task.assigneeId} 
                               onValueChange={(newAssigneeId) => {
-                                setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assigneeId: newAssigneeId } : t));
+                                const updatedTask = { ...task, assigneeId: newAssigneeId, updatedAt: new Date().toISOString() };
+                                setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
                                 const targetAssignee = users.find(u => u.id === newAssigneeId);
                                 if (targetAssignee && user) {
-                                  emailService.sendTaskAssignmentEmail(targetAssignee, task, user);
+                                  emailService.sendTaskAssignmentEmail(targetAssignee, updatedTask, user);
                                 }
                               }}
                             >
@@ -5986,10 +6588,11 @@ export function TaskEngine({
                       <Select 
                         value={task.assigneeId} 
                         onValueChange={(newAssigneeId) => {
-                          setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assigneeId: newAssigneeId } : t));
+                          const updatedTask = { ...task, assigneeId: newAssigneeId, updatedAt: new Date().toISOString() };
+                          setTasks(prev => prev.map(t => t.id === task.id ? updatedTask : t));
                           const targetAssignee = users.find(u => u.id === newAssigneeId);
                           if (targetAssignee && user) {
-                            emailService.sendTaskAssignmentEmail(targetAssignee, task, user);
+                            emailService.sendTaskAssignmentEmail(targetAssignee, updatedTask, user);
                           }
                         }}
                       >
@@ -6013,15 +6616,79 @@ export function TaskEngine({
                   </div>
                 </div>
 
-                {/* Description */}
-                {task.description && (
-                  <div className="space-y-1.5">
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider block">Description</span>
-                    <div className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-xl font-medium">
-                      {task.description}
-                    </div>
+                {/* Description View & Editable Box */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider block">Task Description</span>
+                    {!isEditingDesc ? (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 text-[9px] font-bold text-brand-secondary hover:bg-brand-secondary/10 px-1.5 rounded-md"
+                        onClick={() => {
+                          setDescInput(task.description || '');
+                          setIsEditingDesc(true);
+                        }}
+                      >
+                        <Edit3 className="w-2.5 h-2.5 mr-1" />
+                        {task.description ? 'Edit' : 'Add Description'}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <DescriptionImageUploader 
+                          onAddImage={(imgUrl) => {
+                            setDescInput(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
+                          }}
+                        />
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-5 text-[9px] font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 px-1.5 rounded-md ml-1"
+                          onClick={() => setIsEditingDesc(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="h-5 text-[9px] font-bold bg-brand-secondary text-white hover:bg-brand-secondary/90 px-2 rounded-md"
+                          onClick={() => {
+                            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, description: descInput.trim(), updatedAt: new Date().toISOString() } : t));
+                            logTaskActivity(task.id, 'Description Updated', 'Updated task description details');
+                            setIsEditingDesc(false);
+                            toast.success('Task description updated');
+                          }}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {isEditingDesc ? (
+                    <div className="space-y-2">
+                      <Textarea 
+                        value={descInput}
+                        onChange={(e) => setDescInput(e.target.value)}
+                        placeholder="Add a detailed description for this task..."
+                        className="text-xs rounded-xl border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-[80px]"
+                      />
+                      {descInput && (
+                        <div className="p-2.5 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                          <TaskDescriptionRenderer 
+                            description={descInput}
+                            onRemoveImage={(imgUrl) => {
+                              setDescInput(prev => prev ? prev.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : '');
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed bg-zinc-50 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-xl font-medium">
+                      <TaskDescriptionRenderer description={task.description} />
+                    </div>
+                  )}
+                </div>
 
                 {/* Workflow Stepper Progress */}
                 {task.workflowSteps && task.workflowSteps.length > 0 && (
@@ -6089,252 +6756,41 @@ export function TaskEngine({
                     <span className="text-[9px] uppercase font-bold text-zinc-400 dark:text-zinc-400 tracking-wider">Subtasks ({completedCount}/{subtaskCount})</span>
                     {subtaskCount > 0 && <span className="text-[10px] font-mono text-zinc-400 font-bold">{Math.round((completedCount/subtaskCount)*100)}% Completed</span>}
                   </div>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                     {task.subTasks?.map((subtask) => (
-                      <div 
-                        key={subtask.id} 
-                        className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/10 p-2.5 rounded-xl border border-zinc-100 dark:border-zinc-800 shadow-sm group/st"
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Checkbox 
-                            checked={subtask.isCompleted} 
-                            onCheckedChange={() => toggleSubtask(task.id, subtask.id)}
-                            className="brand-checkbox"
-                          />
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className={cn(
-                              "text-xs font-semibold text-zinc-700 dark:text-zinc-300",
-                              subtask.isCompleted ? "text-zinc-400 dark:text-zinc-600 line-through" : "" // DETAILS_PANEL_SUBTASK_CLASS
-                            )}>
-                              {subtask.name}
-                            </span>
-                            <Select 
-                              value={subtask.assigneeId || 'unassigned'} 
-                              onValueChange={(val) => {
-                                const targetVal = val === 'unassigned' ? '' : val;
-                                setTasks(prev => prev.map(t => {
-                                  if (t.id === task.id && t.subTasks) {
-                                    return {
-                                      ...t,
-                                      subTasks: t.subTasks.map(st => 
-                                        st.id === subtask.id ? { ...st, assigneeId: targetVal } : st
-                                      )
-                                    };
-                                  }
-                                  return t;
-                                }));
-                                if (targetVal) {
-                                  const assignee = users.find(u => u.id === targetVal);
-                                  if (assignee && user) {
-                                    toast.success(`Assigned subtask "${subtask.name}" to ${assignee.name}`);
-                                    const dummyTask: Task = {
-                                      id: task.id,
-                                      projectId: task.projectId,
-                                      deliverableId: task.deliverableId,
-                                      name: `${task.name} - Subtask: ${subtask.name}`,
-                                      type: task.type,
-                                      assigneeId: targetVal,
-                                      status: task.status,
-                                      priority: task.priority,
-                                      dueDate: task.dueDate,
-                                      createdAt: new Date().toISOString(),
-                                      updatedAt: new Date().toISOString()
-                                    };
-                                    try {
-                                      emailService.sendTaskAssignmentEmail(assignee, dummyTask, user);
-                                    } catch (e) {
-                                      console.error("Subtask email assignment notify failed", e);
-                                    }
-                                  }
-                                } else {
-                                  toast.success(`Removed assignment from subtask "${subtask.name}"`);
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="h-6 border-none bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md p-1 shadow-none w-auto focus:ring-0 shrink-0">
-                                {subtask.assigneeId ? (
-                                  (() => {
-                                    const assignee = users.find(u => u.id === subtask.assigneeId);
-                                    return (
-                                      <div className="flex items-center space-x-1.5 cursor-pointer max-w-[120px] truncate select-none">
-                                        <div className="w-4 h-4 rounded-full bg-purple-500/10 text-purple-700 dark:text-purple-400 flex items-center justify-center text-[8px] font-black uppercase shrink-0 border border-purple-500/20">
-                                          {assignee?.name?.charAt(0) || '?'}
-                                        </div>
-                                        <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 truncate">
-                                          {assignee?.name?.split(' ')[0] || subtask.assigneeId}
-                                        </span>
-                                      </div>
-                                    );
-                                  })()
-                                ) : (
-                                  <div className="flex items-center space-x-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors cursor-pointer select-none">
-                                    <span className="w-4 h-4 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-[10px] font-semibold">
-                                      +
-                                    </span>
-                                    <span>Assign</span>
-                                  </div>
-                                )}
-                              </SelectTrigger>
-                              <SelectContent className="rounded-xl border-zinc-200">
-                                <SelectItem value="unassigned" className="text-[10px] font-bold uppercase text-zinc-400">Unassigned</SelectItem>
-                                {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
-                                  <SelectItem key={u.id} value={u.id} className="text-xs font-semibold">
-                                    {u.name} ({u.role})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {/* Subtask Timer Controls & Timing Inputs */}
-                          <div className="flex items-center space-x-1.5 bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded-md border border-zinc-200/50 dark:border-zinc-800">
-                            {/* Timer/Elapsed */}
-                            <div className="flex items-center space-x-1 pr-1.5 border-r border-zinc-200 dark:border-zinc-800">
-                              <span className="font-mono text-[9px] text-zinc-500 font-semibold" title="Live timer duration">
-                                {formatTime(subTaskElapsedTimes[subtask.id] || 0)}
-                              </span>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-4.5 w-4.5 rounded-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 shrink-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSubTaskTimer?.(subtask.id, task.id);
-                                }}
-                              >
-                                {activeTimerSubTaskId === subtask.id ? (
-                                  <Pause className="w-2 h-2 text-orange-500 fill-current animate-pulse" />
-                                ) : (
-                                  <Play className="w-2 h-2 text-zinc-400 hover:text-emerald-500 fill-current" />
-                                )}
-                              </Button>
-                            </div>
-
-                            {/* Spent (Logged) Time */}
-                            <div className="flex items-center space-x-1 pl-1.5 border-r border-zinc-200 dark:border-zinc-800 pr-1.5">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Alloc:</span>
-                              <input
-                                type="text"
-                                placeholder="00:00"
-                                value={
-                                  inputDrafts[`est-${subtask.id}`] !== undefined
-                                    ? inputDrafts[`est-${subtask.id}`]
-                                    : (subtask.timeEstimate !== undefined && subtask.timeEstimate !== 0
-                                        ? formatHoursMinutes(subtask.timeEstimate)
-                                        : '')
-                                }
-                                onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeEstimate', e.target.value)}
-                                onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeEstimate')}
-                                className={cn(
-                                  "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                  inputErrors[`est-${subtask.id}`] 
-                                    ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                    : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                )}
-                                title={
-                                  inputErrors[`est-${subtask.id}`]
-                                    ? "Invalid format! Use plain numbers, colons, or text (e.g. 1h 30m)"
-                                    : "Manually set estimated/allocated time (e.g. 1h, 45m)"
-                                }
-                              />
-                            </div>
-
-                            <div className="flex items-center space-x-1 pl-1.5">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Spent:</span>
-                              <input
-                                type="text"
-                                placeholder="00:00"
-                                value={
-                                  inputDrafts[`spent-${subtask.id}`] !== undefined
-                                    ? inputDrafts[`spent-${subtask.id}`]
-                                    : (subtask.timeLogged !== undefined && subtask.timeLogged !== 0
-                                        ? formatHoursMinutes(subtask.timeLogged)
-                                        : (subTaskElapsedTimes[subtask.id]
-                                            ? formatHoursMinutes(subTaskElapsedTimes[subtask.id] / 3600)
-                                            : '')
-                                      )
-                                }
-                                onChange={(e) => handleDurationInputChange(task.id, subtask.id, 'timeLogged', e.target.value)}
-                                onBlur={() => handleDurationInputBlur(task.id, subtask.id, 'timeLogged')}
-                                className={cn(
-                                  "w-11 h-4.5 text-[9px] font-mono text-center bg-white dark:bg-zinc-950 border rounded focus:outline-none focus:ring-1 transition-colors",
-                                  inputErrors[`spent-${subtask.id}`] 
-                                    ? "border-red-500 text-red-600 focus:ring-red-500/30 dark:border-red-500 dark:text-red-400" 
-                                    : "border-zinc-200 dark:border-zinc-800 focus:ring-brand-secondary/30"
-                                )}
-                                title={
-                                  inputErrors[`spent-${subtask.id}`]
-                                    ? "Invalid format! Use plain numbers (e.g. 45), colons (e.g. 01:30), or text (e.g. 1h 30m, 45m)"
-                                    : "Manually adjust logged time format (e.g. 01:30, 45, 1h 30m)"
-                                }
-                              />
-                            </div>
-                          </div>
-
-                          <Select 
-                            value={subtask.status || (subtask.isCompleted ? TaskStatus.DONE : TaskStatus.OPEN)} 
-                            onValueChange={(newStatus) => {
-                              updateSubtaskStatus(task.id, subtask.id, newStatus as TaskStatus);
-                            }}
-                          >
-                            <SelectTrigger className={cn(
-                              "h-6 px-1.5 text-[8px] font-bold uppercase tracking-wider rounded-lg border transition-all w-[90px] cursor-pointer shrink-0",
-                              (subtask.status === TaskStatus.OPEN || (!subtask.status && !subtask.isCompleted)) && "bg-zinc-50 text-zinc-600 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800",
-                              subtask.status === TaskStatus.IN_PROGRESS && "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30",
-                              subtask.status === TaskStatus.REVIEW && "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30",
-                              subtask.status === TaskStatus.CLIENT_REVIEW && "bg-teal-50 text-teal-600 border-teal-100 dark:bg-teal-950/20 dark:text-teal-400 dark:border-teal-900/30",
-                              subtask.status === TaskStatus.REVISION_REQUESTED && "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/20 dark:text-purple-400 dark:border-purple-900/30",
-                              subtask.status === TaskStatus.APPROVED && "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-900/30",
-                              (subtask.status === TaskStatus.DONE || (!subtask.status && subtask.isCompleted)) && "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30",
-                              subtask.status === TaskStatus.BLOCKED && "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30",
-                              subtask.status === TaskStatus.CANCELLED && "bg-red-50 text-red-600 border-red-105 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/30"
-                            )}>
-                              <SelectValue placeholder="Status" />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-xl border-zinc-200">
-                              <SelectItem value={TaskStatus.OPEN} className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 focus:bg-zinc-50 dark:text-zinc-400">Open</SelectItem>
-                              <SelectItem value={TaskStatus.IN_PROGRESS} className="text-[9px] font-bold uppercase tracking-widest text-blue-600 focus:bg-blue-50 dark:text-blue-400">In Progress</SelectItem>
-                              <SelectItem value={TaskStatus.REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-amber-600 focus:bg-amber-50 dark:text-amber-400">Review</SelectItem>
-                              <SelectItem value={TaskStatus.CLIENT_REVIEW} className="text-[9px] font-bold uppercase tracking-widest text-teal-600 focus:bg-teal-50 dark:text-teal-400">Client Review</SelectItem>
-                              <SelectItem value={TaskStatus.REVISION_REQUESTED} className="text-[9px] font-bold uppercase tracking-widest text-purple-600 focus:bg-purple-50 dark:text-purple-400">Revision Requested</SelectItem>
-                              <SelectItem value={TaskStatus.APPROVED} className="text-[9px] font-bold uppercase tracking-widest text-indigo-600 focus:bg-indigo-50 dark:text-indigo-400">Approved</SelectItem>
-                              <SelectItem value={TaskStatus.DONE} className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 focus:bg-emerald-50 dark:text-emerald-400">Done</SelectItem>
-                              <SelectItem value={TaskStatus.BLOCKED} className="text-[9px] font-bold uppercase tracking-widest text-rose-600 focus:bg-rose-50 dark:text-rose-400">Blocked</SelectItem>
-                              <SelectItem value={TaskStatus.CANCELLED} className="text-[9px] font-bold uppercase tracking-widest text-red-600 focus:bg-red-50 dark:text-red-400">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-6 w-6 opacity-0 group-hover/st:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteSubtask(task.id, subtask.id);
-                            }}
-                          >
-                            <Trash2 className="w-2.5 h-2.5 text-red-400" />
-                          </Button>
-                        </div>
-                      </div>
+                      <EditableSubtaskRow
+                        key={subtask.id}
+                        subtask={subtask}
+                        taskId={task.id}
+                        users={users}
+                        onToggle={toggleSubtask}
+                        onUpdateStatus={updateSubtaskStatus}
+                        onUpdateAssignees={updateSubtaskAssignees}
+                        onUpdateSubtask={updateSubtask}
+                        onDelete={deleteSubtask}
+                        subTaskElapsedTimes={subTaskElapsedTimes}
+                        activeTimerSubTaskId={activeTimerSubTaskId}
+                        toggleSubTaskTimer={toggleSubTaskTimer}
+                        handleDurationInputChange={handleDurationInputChange}
+                        handleDurationInputBlur={handleDurationInputBlur}
+                        inputDrafts={inputDrafts}
+                        inputErrors={inputErrors}
+                        formatTime={formatTime}
+                        formatHoursMinutes={formatHoursMinutes}
+                      />
                     ))}
 
-                    <div className="relative pt-1">
-                      <Input 
-                        placeholder="Add sub-task & press Enter..." 
-                        className="h-9 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-xs pl-8 pr-3 focus-visible:ring-brand-secondary/20 rounded-xl"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            addSubtask(task.id, (e.target as HTMLInputElement).value);
-                            (e.target as HTMLInputElement).value = '';
-                          }
-                        }}
-                      />
-                      <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    </div>
+                    <SubtaskInput taskId={task.id} onAddSubtask={(tId, name, assignees, desc) => addSubtask(tId, name, assignees, desc)} />
                   </div>
                 </div>
+
+                {/* Task Activity & Updates Log */}
+                <TaskActivityFeed 
+                  task={task}
+                  onAddComment={(tId, commentText) => {
+                    logTaskActivity(tId, 'Comment', commentText);
+                  }}
+                />
 
                 {/* Timesheet Duration and Log Toggle inside Modal */}
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-5 space-y-4">

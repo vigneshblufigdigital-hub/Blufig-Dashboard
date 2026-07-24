@@ -62,8 +62,8 @@ export function ProjectBoard({
   onEditProject?: (project: Project) => void;
 }) {
   const isAdminUser = currentUser && (ADMIN_ROLES.includes(currentUser.role) || isSuperAdmin(currentUser));
-  const canCreateProject = isSuperAdmin(currentUser) || hasPermission(currentUser, 'canCreateProject');
-  const canDeleteProject = isSuperAdmin(currentUser) || hasPermission(currentUser, 'canDeleteProject');
+  const canCreateProject = isSuperAdmin(currentUser);
+  const canDeleteProject = isSuperAdmin(currentUser);
   const eligibleAssignees = (users || MOCK_USERS).filter(u => u.role !== UserRole.CLIENT);
 
   const handleExportProjectDetails = (project: Project) => {

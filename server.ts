@@ -705,6 +705,72 @@ Guidelines:
     }
   });
 
+  // API Route for AI Status & Progress Summary
+  apiRouter.post("/tasks/summary", async (req, res) => {
+    try {
+      const { tasks = [], projects = [], users = [] } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+          error: "GEMINI_API_KEY environment variable is required on the server." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const totalTasks = tasks.length;
+      const doneTasks = tasks.filter((t: any) => t.status === 'Done' || t.status === 'Approved').length;
+      const inProgressTasks = tasks.filter((t: any) => t.status === 'In Progress').length;
+      const blockedTasks = tasks.filter((t: any) => t.status === 'Blocked').length;
+      const highPriorityTasks = tasks.filter((t: any) => t.priority === 'High' || t.priority === 'Critical').length;
+
+      const projectSummary = projects.slice(0, 10).map((p: any) => {
+        const pTasks = tasks.filter((t: any) => t.projectId === p.id);
+        const pDone = pTasks.filter((t: any) => t.status === 'Done' || t.status === 'Approved').length;
+        return `${p.name} (${p.status}): ${pDone}/${pTasks.length} tasks completed`;
+      }).join('\n');
+
+      const prompt = `
+        You are the Chief Operations Officer and AI Project Manager at BluFig Digital Operations Desk.
+        Generate an executive AI Ops Status & Progress Summary based on current live workspace data.
+
+        Current Operational Data:
+        - Total Active Tasks: ${totalTasks}
+        - Completed / Approved Tasks: ${doneTasks}
+        - Tasks In Progress: ${inProgressTasks}
+        - Blocked Tasks: ${blockedTasks}
+        - High/Critical Priority Tasks: ${highPriorityTasks}
+        - Total Projects: ${projects.length}
+
+        Projects Breakdown:
+        ${projectSummary || "No active projects listed."}
+
+        Provide a clear, professional, well-formatted summary with sections and bullet points:
+        1. 📊 Executive Workload & Health Overview
+        2. 🚀 Key Project Milestones & Progress
+        3. ⚠️ Critical Risks & Blockers
+        4. 💡 Strategic Next Steps for the Team
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+
+      res.json({ summary: response.text || "No summary generated." });
+    } catch (error: any) {
+      console.error("Gemini tasks/summary error:", error);
+      res.status(500).json({ error: error?.message || "Failed to generate AI status summary." });
+    }
+  });
+
   // Dynamic SMTP Config Resolver
   async function resolveSMTPConfig(reqBody?: any) {
     let smtpHost = process.env.SMTP_HOST || "smtp.hostinger.com";
@@ -919,6 +985,14 @@ Guidelines:
             </h2>
             <table role="presentation" style="width: 100%; border-collapse: collapse; font-size: 13px;">
               <tr>
+                <td style="padding: 6px 0; color: #71717a; width: 30%; font-weight: bold;">Assigned To:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">${assignee.name} (${assignee.email})</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #71717a; width: 30%; font-weight: bold;">Assigned By:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">${creator?.name || "Operations Administrator"}${creator?.email ? ` (${creator.email})` : ""}</td>
+              </tr>
+              <tr>
                 <td style="padding: 6px 0; color: #71717a; width: 30%; font-weight: bold;">Priority:</td>
                 <td style="padding: 6px 0; color: #0f172a; font-weight: bold;">
                   <span style="padding: 2px 6px; border-radius: 4px; background-color: ${task.priority === 'Critical' ? '#fee2e2' : task.priority === 'High' ? '#ffedd5' : '#f1f5f9'}; color: ${task.priority === 'Critical' ? '#991b1b' : task.priority === 'High' ? '#9a3412' : '#334155'}; font-size: 11px;">
@@ -1013,11 +1087,25 @@ Guidelines:
         htmlContent = buildWrappedHtml(subject, bodyContent);
       }
 
+      // Determine CC recipient (assigner/creator for task assignment, previous assignee for workflow handoff)
+      let ccEmail: string | undefined = undefined;
+      if (type === "assignment" && creator && creator.email && typeof creator.email === "string") {
+        const cEmail = creator.email.trim().toLowerCase();
+        if (cEmail.includes("@") && cEmail !== assignee.email.trim().toLowerCase()) {
+          ccEmail = cEmail;
+        }
+      } else if (type === "handoff" && previousAssignee && previousAssignee.email && typeof previousAssignee.email === "string") {
+        const pEmail = previousAssignee.email.trim().toLowerCase();
+        if (pEmail.includes("@") && pEmail !== assignee.email.trim().toLowerCase()) {
+          ccEmail = pEmail;
+        }
+      }
+
       let simulated = false;
       let deliveryError = null;
 
       if (isConfigured) {
-        console.log(`[EMAIL SYSTEM] Attempting real mail delivery to ${assignee.email} via ${smtpHost}:${smtpPort}`);
+        console.log(`[EMAIL SYSTEM] Attempting real mail delivery to ${assignee.email}${ccEmail ? ` (CC: ${ccEmail})` : ""} via ${smtpHost}:${smtpPort}`);
         const transporter = nodemailer.createTransport({
           host: smtpHost,
           port: parseInt(smtpPort),
@@ -1034,35 +1122,36 @@ Guidelines:
           socketTimeout: 15000,
         });
 
+        const recipientEmail = assignee.email.trim().toLowerCase();
+        const mailOptions: any = {
+          from: `"${smtpSenderName}" <${smtpFrom}>`,
+          to: recipientEmail,
+          replyTo: smtpFrom || smtpUser,
+          sender: smtpUser,
+          subject: subject,
+          text: textContent,
+          html: htmlContent,
+        };
+        if (ccEmail) {
+          mailOptions.cc = ccEmail;
+        }
+
         try {
-          const recipientEmail = assignee.email.trim().toLowerCase();
-          console.log(`[EMAIL SYSTEM] Attempting first send with sender: "${smtpSenderName}" <${smtpFrom}> to: ${recipientEmail}`);
-          await transporter.sendMail({
-            from: `"${smtpSenderName}" <${smtpFrom}>`,
-            to: recipientEmail,
-            replyTo: smtpFrom || smtpUser,
-            sender: smtpUser,
-            subject: subject,
-            text: textContent,
-            html: htmlContent,
-          });
-          console.log(`[EMAIL SYSTEM] Real email delivered successfully on first attempt to ${recipientEmail}`);
+          console.log(`[EMAIL SYSTEM] Attempting first send with sender: "${smtpSenderName}" <${smtpFrom}> to: ${recipientEmail}${ccEmail ? ` (cc: ${ccEmail})` : ''}`);
+          await transporter.sendMail(mailOptions);
+          console.log(`[EMAIL SYSTEM] Real email delivered successfully on first attempt to ${recipientEmail}${ccEmail ? ` and CC'd to ${ccEmail}` : ''}`);
         } catch (firstError: any) {
           console.log(`[EMAIL SYSTEM] SMTP gateway response during first attempt: ${softenLog(firstError.message)}`);
           if (smtpFrom !== smtpUser && smtpUser && smtpUser.includes("@")) {
             try {
-              const recipientEmail = assignee.email.trim().toLowerCase();
               console.log(`[EMAIL SYSTEM] Retrying automatically with authenticated SMTP_USER (${smtpUser}) as the sender...`);
-              await transporter.sendMail({
+              const retryMailOptions = {
+                ...mailOptions,
                 from: `"${smtpSenderName}" <${smtpUser}>`,
-                to: recipientEmail,
                 replyTo: smtpUser,
-                sender: smtpUser,
-                subject: subject,
-                text: textContent,
-                html: htmlContent,
-              });
-              console.log(`[EMAIL SYSTEM] Real email delivered successfully on retry to ${recipientEmail}`);
+              };
+              await transporter.sendMail(retryMailOptions);
+              console.log(`[EMAIL SYSTEM] Real email delivered successfully on retry to ${recipientEmail}${ccEmail ? ` and CC'd to ${ccEmail}` : ''}`);
             } catch (retryError: any) {
               console.log(`[EMAIL SYSTEM] SMTP gateway response during retry: ${softenLog(retryError.message)}`);
               deliveryError = retryError.message;
@@ -1079,8 +1168,9 @@ Guidelines:
       }
 
       // Log to sandbox database
+      const recipientDisplay = ccEmail ? `${assignee.email} (CC: ${ccEmail})` : assignee.email;
       await logEmailToSandbox({
-        recipient: assignee.email,
+        recipient: recipientDisplay,
         recipientName: assignee.name,
         subject,
         text: textContent,
@@ -1096,15 +1186,15 @@ Guidelines:
           success: true,
           simulated: true,
           message: deliveryError 
-            ? `SMTP authentication or delivery failed (${deliveryError}). Email notification has been captured in the In-App Sandbox Outbox.`
-            : `Email notification successfully simulated and logged to the Sandbox Outbox.`
+            ? `SMTP authentication or delivery failed (${deliveryError}). Email notification captured in Sandbox Outbox.`
+            : `Email notification simulated for ${assignee.name}${ccEmail ? ` and CC'd to ${creator?.name || 'assigner'} (${ccEmail})` : ''}. Logged to Sandbox Outbox.`
         });
       }
 
       return res.json({
         success: true,
         simulated: false,
-        message: `Email notification sent successfully to ${assignee.name} (${assignee.email})!`
+        message: `Email notification delivered to ${assignee.name} (${assignee.email})${ccEmail ? ` and CC'd to ${creator?.name || 'assigner'} (${ccEmail})` : ''}!`
       });
     } catch (error: any) {
       console.log("[EMAIL SYSTEM] Notice: Dispatch completed, details:", softenLog(error));

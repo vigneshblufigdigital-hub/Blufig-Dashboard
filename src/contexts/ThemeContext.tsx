@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
+type ThemeMode = 'light' | 'dark' | 'system';
 type FontSize = 'sm' | 'base' | 'lg' | 'xl';
 
 interface ThemeContextType {
   theme: Theme;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
   toggleTheme: () => void;
   fontSize: FontSize;
   setFontSize: (size: FontSize) => void;
@@ -13,9 +16,16 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
+    const stored = localStorage.getItem('themeMode') as ThemeMode | null;
+    if (stored === 'light' || stored === 'dark' || stored === 'system') {
+      return stored;
+    }
+    return 'system';
+  });
+
   const [theme, setTheme] = useState<Theme>(() => {
-    // Check localStorage first, fallback to system preference
-    const stored = localStorage.getItem('theme') as Theme | null;
+    const stored = localStorage.getItem('themeMode') as ThemeMode | null;
     if (stored === 'light' || stored === 'dark') {
       return stored;
     }
@@ -33,6 +43,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return 'base';
   });
 
+  // Handle system preference media query listener
+  useEffect(() => {
+    if (themeMode === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const updateTheme = () => {
+        setTheme(mediaQuery.matches ? 'dark' : 'light');
+      };
+      updateTheme();
+      mediaQuery.addEventListener('change', updateTheme);
+      return () => mediaQuery.removeEventListener('change', updateTheme);
+    } else {
+      setTheme(themeMode);
+    }
+  }, [themeMode]);
+
   useEffect(() => {
     const root = window.document.documentElement;
     if (theme === 'dark') {
@@ -40,32 +65,49 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('theme', theme);
   }, [theme]);
 
   useEffect(() => {
     const root = window.document.documentElement;
+    const body = window.document.body;
+    let px = '16px';
+    let scale = '1';
+
     switch (fontSize) {
       case 'sm':
-        root.style.fontSize = '14px';
+        px = '14px';
+        scale = '0.92';
         break;
       case 'base':
-        root.style.fontSize = '16px';
+        px = '16px';
+        scale = '1';
         break;
       case 'lg':
-        root.style.fontSize = '18px';
+        px = '18px';
+        scale = '1.08';
         break;
       case 'xl':
-        root.style.fontSize = '20px';
+        px = '20px';
+        scale = '1.16';
         break;
-      default:
-        root.style.fontSize = '16px';
     }
+
+    root.style.fontSize = px;
+    if (body) {
+      body.style.fontSize = px;
+    }
+    root.setAttribute('data-font-size', fontSize);
     localStorage.setItem('fontSize', fontSize);
   }, [fontSize]);
 
+  const setThemeMode = (mode: ThemeMode) => {
+    setThemeModeState(mode);
+    localStorage.setItem('themeMode', mode);
+  };
+
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setThemeMode(nextTheme);
   };
 
   const setFontSize = (size: FontSize) => {
@@ -73,7 +115,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, fontSize, setFontSize }}>
+    <ThemeContext.Provider value={{ theme, themeMode, setThemeMode, toggleTheme, fontSize, setFontSize }}>
       {children}
     </ThemeContext.Provider>
   );

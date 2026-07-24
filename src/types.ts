@@ -132,11 +132,13 @@ export interface SubTask {
   name: string;
   isCompleted: boolean;
   createdAt: string;
-  assigneeId?: string;
+  assigneeId?: string; // primary assignee ID for backward compatibility
+  assigneeIds?: string[]; // multiple assigned person IDs
   status?: TaskStatus;
   timeEstimate?: number; // in hours
   timeLogged?: number; // in hours
   timeLoggedSeconds?: number; // in seconds
+  description?: string; // subtask description
 }
 
 export interface TaskWorkflowStep {
@@ -145,6 +147,17 @@ export interface TaskWorkflowStep {
   assigneeId: string;
   isCompleted: boolean;
   completedAt?: string;
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  action: string;
+  details?: string;
+  timestamp: string;
 }
 
 export interface Task {
@@ -167,6 +180,7 @@ export interface Task {
   subTasks?: SubTask[]; // Added for UI convenience
   workflowSteps?: TaskWorkflowStep[];
   currentStepIndex?: number;
+  activities?: TaskActivity[]; // Activity log entries
   
   // Recurrence Fields
   isRecurring?: boolean;

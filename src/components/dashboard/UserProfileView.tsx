@@ -63,7 +63,7 @@ interface UserProfileViewProps {
 
 export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }: UserProfileViewProps) {
   const { user, setUser } = useAuth();
-  const { theme, toggleTheme, fontSize, setFontSize } = useTheme();
+  const { theme, themeMode, setThemeMode, toggleTheme, fontSize, setFontSize } = useTheme();
   
   if (!user) return null;
 
@@ -615,38 +615,55 @@ export function UserProfileView({ usersList, onUpdateUsers, onOpenRoleSwitcher }
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <button
-                        onClick={() => theme !== 'light' && toggleTheme()}
+                        onClick={() => setThemeMode('light')}
                         className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
-                          theme === 'light' 
+                          themeMode === 'light' 
                             ? 'border-brand-secondary bg-orange-500/5 shadow-sm' 
                             : 'border-zinc-200/60 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                         }`}
                       >
                         <div>
-                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Light Daylight Mode</div>
+                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Light Daylight</div>
                           <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold">Clean charcoal accents & soft whites</div>
                         </div>
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${theme === 'light' ? 'border-brand-secondary text-brand-secondary' : 'border-zinc-300'}`}>
-                          {theme === 'light' && <Check className="w-3.5 h-3.5" />}
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${themeMode === 'light' ? 'border-brand-secondary text-brand-secondary' : 'border-zinc-300'}`}>
+                          {themeMode === 'light' && <Check className="w-3.5 h-3.5" />}
                         </div>
                       </button>
 
                       <button
-                        onClick={() => theme !== 'dark' && toggleTheme()}
+                        onClick={() => setThemeMode('dark')}
                         className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
-                          theme === 'dark' 
-                            ? 'border-brand-secondary bg-orange-550/10 dark:border-brand-secondary shadow-sm' 
+                          themeMode === 'dark' 
+                            ? 'border-brand-secondary bg-orange-500/10 dark:border-brand-secondary shadow-sm' 
                             : 'border-zinc-200/60 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
                         }`}
                       >
                         <div>
-                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Midnight Dark Mode</div>
+                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Midnight Dark</div>
                           <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold">Deep onyx blacks & neon gold highlights</div>
                         </div>
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${theme === 'dark' ? 'border-brand-secondary text-brand-secondary' : 'border-zinc-300'}`}>
-                          {theme === 'dark' && <Check className="w-3.5 h-3.5" />}
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${themeMode === 'dark' ? 'border-brand-secondary text-brand-secondary' : 'border-zinc-300'}`}>
+                          {themeMode === 'dark' && <Check className="w-3.5 h-3.5" />}
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => setThemeMode('system')}
+                        className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                          themeMode === 'system' 
+                            ? 'border-brand-secondary bg-orange-500/10 dark:border-brand-secondary shadow-sm' 
+                            : 'border-zinc-200/60 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'
+                        }`}
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100">System Preference</div>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-semibold">Auto-sync with OS appearance setting</div>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${themeMode === 'system' ? 'border-brand-secondary text-brand-secondary' : 'border-zinc-300'}`}>
+                          {themeMode === 'system' && <Check className="w-3.5 h-3.5" />}
                         </div>
                       </button>
                     </div>

@@ -756,14 +756,61 @@ function Dashboard() {
     return initial;
   });
 
-  // Keep it in sync for newly created or updated tasks
+  // Refs and state for persistent wall-clock active timer tracking
+  const timerStartRef = React.useRef<{ taskId: string; startTime: number; initialSeconds: number } | null>(null);
+  const subTaskTimerStartRef = React.useRef<{ subTaskId: string; startTime: number; initialSeconds: number } | null>(null);
+
+  // Restore running active timer on mount if page was reloaded or refreshed
+  React.useEffect(() => {
+    try {
+      const savedTimer = localStorage.getItem('blufig_active_task_timer');
+      if (savedTimer) {
+        const parsed = JSON.parse(savedTimer);
+        if (parsed && parsed.taskId && parsed.startTime && parsed.initialSeconds !== undefined) {
+          timerStartRef.current = parsed;
+          setActiveTimerTaskId(parsed.taskId);
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const savedSubTimer = localStorage.getItem('blufig_active_subtask_timer');
+      if (savedSubTimer) {
+        const parsed = JSON.parse(savedSubTimer);
+        if (parsed && parsed.subTaskId && parsed.startTime && parsed.initialSeconds !== undefined) {
+          subTaskTimerStartRef.current = parsed;
+          setActiveTimerSubTaskId(parsed.subTaskId);
+        }
+      }
+    } catch (e) {}
+  }, []);
+
+  // Keep active timer state persisted to localStorage
+  React.useEffect(() => {
+    if (activeTimerTaskId && timerStartRef.current) {
+      localStorage.setItem('blufig_active_task_timer', JSON.stringify(timerStartRef.current));
+    } else {
+      localStorage.removeItem('blufig_active_task_timer');
+    }
+  }, [activeTimerTaskId]);
+
+  React.useEffect(() => {
+    if (activeTimerSubTaskId && subTaskTimerStartRef.current) {
+      localStorage.setItem('blufig_active_subtask_timer', JSON.stringify(subTaskTimerStartRef.current));
+    } else {
+      localStorage.removeItem('blufig_active_subtask_timer');
+    }
+  }, [activeTimerSubTaskId]);
+
+  // Keep it in sync for newly created or updated tasks (never overwrite running timer task)
   React.useEffect(() => {
     setElapsedTimes(prev => {
       const updated = { ...prev };
       let changed = false;
       tasks.forEach(t => {
         const val = t.timeLoggedSeconds ?? (t.timeLogged ? Math.round(t.timeLogged * 3600) : 0);
-        if (updated[t.id] === undefined || (activeTimerTaskId !== t.id && updated[t.id] !== val)) {
+        if (activeTimerTaskId === t.id) return;
+        if (updated[t.id] === undefined || updated[t.id] !== val) {
           updated[t.id] = val;
           changed = true;
         }
@@ -772,7 +819,7 @@ function Dashboard() {
     });
   }, [tasks, activeTimerTaskId]);
 
-  // Keep subtask times in sync for newly created or updated subtasks
+  // Keep subtask times in sync for newly created or updated subtasks (never overwrite running subtask timer)
   React.useEffect(() => {
     setSubTaskElapsedTimes(prev => {
       const updated = { ...prev };
@@ -780,7 +827,8 @@ function Dashboard() {
       tasks.forEach(t => {
         t.subTasks?.forEach(st => {
           const val = (st as any).timeLoggedSeconds ?? 0;
-          if (updated[st.id] === undefined || (activeTimerSubTaskId !== st.id && updated[st.id] !== val)) {
+          if (activeTimerSubTaskId === st.id) return;
+          if (updated[st.id] === undefined || updated[st.id] !== val) {
             updated[st.id] = val;
             changed = true;
           }
@@ -790,7 +838,7 @@ function Dashboard() {
     });
   }, [tasks, activeTimerSubTaskId]);
 
-  // Toast-based notification alert system for Project Managers (roles like AGENCY_ADMIN, ACCOUNT_DIRECTOR, ACCOUNT_MANAGER)
+  // Toast-based notification alert system for Project Managers
   const alertedTasksRef = React.useRef<Set<string>>(new Set());
 
   React.useEffect(() => {
@@ -820,7 +868,6 @@ function Dashboard() {
         dueDate.getMonth() === now.getMonth() &&
         dueDate.getDate() === now.getDate();
 
-      // Within 24 hours window: due within the next 24 hours OR has a due date of today
       const isWithin24Hours = (diffHours > 0 && diffHours <= 24) || isSameDay;
 
       if (isWithin24Hours) {
@@ -840,71 +887,84 @@ function Dashboard() {
     });
   }, [tasks, user, user?.role]);
 
-  // Track timers in real-time
+  // Track task timers in real-time using wall-clock calculation (prevents background tab throttling loss)
   React.useEffect(() => {
     let interval: any = null;
-    if (activeTimerTaskId) {
-      interval = setInterval(() => {
-        setElapsedTimes(prev => {
-          const updatedSeconds = (prev[activeTimerTaskId] || 0) + 1;
-          
-          // Write back directly to tasks periodically so state stays fully synced
-          setTasks(prevTasks => prevTasks.map(t => 
-            t.id === activeTimerTaskId 
-              ? { 
-                  ...t, 
-                  timeLoggedSeconds: updatedSeconds, 
-                  timeLogged: parseFloat((updatedSeconds / 3600).toFixed(4)) 
-                } 
-              : t
-          ));
 
-          return {
-            ...prev,
-            [activeTimerTaskId]: updatedSeconds
-          };
-        });
-      }, 1000);
+    const updateTimer = () => {
+      if (!activeTimerTaskId || !timerStartRef.current || timerStartRef.current.taskId !== activeTimerTaskId) return;
+      const { startTime, initialSeconds } = timerStartRef.current;
+      const elapsedSinceStart = Math.floor((Date.now() - startTime) / 1000);
+      const updatedSeconds = Math.max(0, initialSeconds + elapsedSinceStart);
+
+      setElapsedTimes(prev => {
+        if (prev[activeTimerTaskId] === updatedSeconds) return prev;
+        return {
+          ...prev,
+          [activeTimerTaskId]: updatedSeconds
+        };
+      });
+    };
+
+    if (activeTimerTaskId) {
+      updateTimer();
+      interval = setInterval(updateTimer, 1000);
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          updateTimer();
+        }
+      };
+
+      window.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', updateTimer);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', updateTimer);
+      };
     }
-    return () => clearInterval(interval);
   }, [activeTimerTaskId]);
 
-  // Real-time subtask timer interval
+  // Track subtask timers in real-time using wall-clock calculation
   React.useEffect(() => {
     let interval: any = null;
+
+    const updateSubTimer = () => {
+      if (!activeTimerSubTaskId || !subTaskTimerStartRef.current || subTaskTimerStartRef.current.subTaskId !== activeTimerSubTaskId) return;
+      const { startTime, initialSeconds } = subTaskTimerStartRef.current;
+      const elapsedSinceStart = Math.floor((Date.now() - startTime) / 1000);
+      const updatedSeconds = Math.max(0, initialSeconds + elapsedSinceStart);
+
+      setSubTaskElapsedTimes(prev => {
+        if (prev[activeTimerSubTaskId] === updatedSeconds) return prev;
+        return {
+          ...prev,
+          [activeTimerSubTaskId]: updatedSeconds
+        };
+      });
+    };
+
     if (activeTimerSubTaskId) {
-      interval = setInterval(() => {
-        setSubTaskElapsedTimes(prev => {
-          const updatedSeconds = (prev[activeTimerSubTaskId] || 0) + 1;
+      updateSubTimer();
+      interval = setInterval(updateSubTimer, 1000);
 
-          // Write back directly to subtask inside the task
-          setTasks(prevTasks => prevTasks.map(t => {
-            if (t.subTasks && t.subTasks.some(st => st.id === activeTimerSubTaskId)) {
-              return {
-                ...t,
-                updatedAt: new Date().toISOString(),
-                subTasks: t.subTasks.map(st => 
-                  st.id === activeTimerSubTaskId 
-                    ? {
-                        ...st,
-                        timeLoggedSeconds: updatedSeconds,
-                        timeLogged: parseFloat((updatedSeconds / 3600).toFixed(4))
-                      } as any
-                    : st
-                )
-              };
-            }
-            return t;
-          }));
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          updateSubTimer();
+        }
+      };
 
-          return {
-            ...prev,
-            [activeTimerSubTaskId]: updatedSeconds
-          };
-        });
-      }, 1000);
+      window.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', updateSubTimer);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', updateSubTimer);
+      };
     }
-    return () => clearInterval(interval);
   }, [activeTimerSubTaskId]);
 
   const formatTime = (seconds: number) => {
@@ -919,8 +979,10 @@ function Dashboard() {
       e.stopPropagation();
     }
     if (activeTimerTaskId === taskId) {
-      setActiveTimerTaskId(null);
       const finalSecs = elapsedTimes[taskId] || 0;
+      setActiveTimerTaskId(null);
+      timerStartRef.current = null;
+
       setTasks(prev => prev.map(t => 
         t.id === taskId 
           ? { 
@@ -931,6 +993,7 @@ function Dashboard() {
             } 
           : t
       ));
+      toast.info('Timer stopped', { description: `Logged ${formatTime(finalSecs)}` });
     } else {
       if (activeTimerTaskId) {
         const runningId = activeTimerTaskId;
@@ -946,20 +1009,31 @@ function Dashboard() {
             : t
         ));
       }
+      
+      const initialSecs = elapsedTimes[taskId] || 0;
+      timerStartRef.current = {
+        taskId,
+        startTime: Date.now(),
+        initialSeconds: initialSecs
+      };
       setActiveTimerTaskId(taskId);
+
       // Automatically set task to "In Progress" if it wasn't
       setTasks(prev => prev.map(t => 
         t.id === taskId && t.status !== TaskStatus.IN_PROGRESS && t.status !== TaskStatus.REVIEW && t.status !== TaskStatus.DONE
           ? { ...t, status: TaskStatus.IN_PROGRESS, updatedAt: new Date().toISOString() } 
           : t
       ));
+      toast.success('Timer started');
     }
   };
 
   const toggleSubTaskTimer = (subTaskId: string, parentTaskId: string) => {
     if (activeTimerSubTaskId === subTaskId) {
-      setActiveTimerSubTaskId(null);
       const finalSecs = subTaskElapsedTimes[subTaskId] || 0;
+      setActiveTimerSubTaskId(null);
+      subTaskTimerStartRef.current = null;
+
       setTasks(prev => prev.map(t => {
         if (t.id === parentTaskId && t.subTasks) {
           return {
@@ -978,6 +1052,7 @@ function Dashboard() {
         }
         return t;
       }));
+      toast.info('Subtask timer stopped', { description: `Logged ${formatTime(finalSecs)}` });
     } else {
       if (activeTimerSubTaskId) {
         const runningId = activeTimerSubTaskId;
@@ -1001,7 +1076,16 @@ function Dashboard() {
           return t;
         }));
       }
+
+      const initialSecs = subTaskElapsedTimes[subTaskId] || 0;
+      subTaskTimerStartRef.current = {
+        subTaskId,
+        startTime: Date.now(),
+        initialSeconds: initialSecs
+      };
       setActiveTimerSubTaskId(subTaskId);
+      toast.success('Subtask timer started');
+
       // Ensure the parent task itself is In Progress if not already
       setTasks(prev => prev.map(t => {
         if (t.id === parentTaskId) {

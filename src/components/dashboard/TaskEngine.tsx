@@ -2597,12 +2597,16 @@ export function TaskEngine({
       );
     }
 
+    const finalProjectId = newTask.projectId || filterProjectId || projects[0]?.id || '';
+
     const taskToAdd: Task = {
       ...newTask as Task,
       id: 't' + Math.random().toString(36).substr(2, 9),
+      projectId: finalProjectId,
       deliverableId: 'custom-' + Date.now(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdById: user?.id,
       assigneeId,
       subTasks: [],
       workflowSteps: enableWorkflow ? steps : undefined,
@@ -2746,8 +2750,9 @@ export function TaskEngine({
   const isUserAssignedToTask = (t: Task, userId: string | null | undefined): boolean => {
     if (!userId) return false;
     if (t.assigneeId === userId) return true;
+    if (t.createdById === userId) return true;
     if (t.workflowSteps?.some(step => step.assigneeId === userId)) return true;
-    if (t.subTasks?.some(st => st.assigneeId === userId)) return true;
+    if (t.subTasks?.some(st => st.assigneeId === userId || st.assigneeIds?.includes(userId))) return true;
     return false;
   };
 
@@ -2785,8 +2790,8 @@ export function TaskEngine({
     // Role based visibility
     const isLeadOrAdmin = user && (ADMIN_ROLES.includes(user.role) || isSuperAdmin(user));
 
-    // If not lead/admin, only see assigned tasks, tasks where they are a workflow step assignee, or subtasks
-    if (!isLeadOrAdmin && !isUserAssignedToTask(t, user?.id)) {
+    // Non-lead employees can view all project/workspace tasks in 'all' view, or filtered by 'my' tasks
+    if (!isLeadOrAdmin && taskScope === 'my' && !isUserAssignedToTask(t, user?.id)) {
       return false;
     }
 
@@ -3079,6 +3084,7 @@ export function TaskEngine({
 
   const addSubtask = (taskId: string, name: string, assigneeIds: string[] = [], description?: string) => {
     if (!name.trim()) return;
+    const finalAssigneeIds = assigneeIds.length > 0 ? assigneeIds : (user?.id ? [user.id] : []);
     const newSubtask: SubTask = {
       id: 'st-' + Math.random().toString(36).substring(2, 9),
       taskId,
@@ -3087,8 +3093,8 @@ export function TaskEngine({
       isCompleted: false,
       createdAt: new Date().toISOString(),
       status: TaskStatus.OPEN,
-      assigneeIds: assigneeIds,
-      assigneeId: assigneeIds[0] || ''
+      assigneeIds: finalAssigneeIds,
+      assigneeId: finalAssigneeIds[0] || ''
     };
 
     setTasks(prev => prev.map(t => {
@@ -3102,6 +3108,7 @@ export function TaskEngine({
       return t;
     }));
     logTaskActivity(taskId, 'Subtask Created', `Added subtask "${name.trim()}"`);
+    toast.success(`Subtask "${name.trim()}" added successfully`);
   };
 
   const deleteSubtask = (taskId: string, subtaskId: string) => {

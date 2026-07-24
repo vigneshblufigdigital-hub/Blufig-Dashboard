@@ -167,6 +167,7 @@ export interface Task {
   name: string;
   type: string;
   assigneeId: string;
+  createdById?: string;
   status: TaskStatus;
   priority: Priority;
   dueDate: string;

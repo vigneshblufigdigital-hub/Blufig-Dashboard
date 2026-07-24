@@ -6195,7 +6195,7 @@ export function TaskEngine({
 
                             {/* Card Controls Footer */}
                             <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/60 mt-4 pt-3 gap-1" onClick={(e) => e.stopPropagation()}>
-                              {/* User Selector Dropdown */}
+                              {/* Compact User Assignee Avatar Dropdown */}
                             <Select 
                               value={task.assigneeId} 
                               onValueChange={(newAssigneeId) => {
@@ -6207,26 +6207,24 @@ export function TaskEngine({
                                 }
                               }}
                             >
-                              <SelectTrigger className="h-7 border-none shadow-none focus:ring-0 p-0 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg pr-1 shrink min-w-[64px] max-w-[110px] overflow-hidden text-zinc-700 dark:text-zinc-300">
-                                <div className="flex items-center space-x-1 truncate">
-                                  <Avatar className="w-4.5 h-4.5 border shadow-sm shrink-0">
-                                    <AvatarFallback className="text-[8px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                                      {assignee?.name ? assignee.name.charAt(0) : '?'}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-[10px] font-semibold truncate">
-                                    {assignee?.name ? assignee.name.split(' ')[0] : 'Assign'}
-                                  </span>
-                                </div>
+                              <SelectTrigger 
+                                className="h-6 w-6 p-0 border-none shadow-none focus:ring-0 rounded-full hover:ring-2 hover:ring-orange-500/30 shrink-0 cursor-pointer" 
+                                title={assignee?.name ? `Assigned to: ${assignee.name}` : 'Assign team member'}
+                              >
+                                <Avatar className="w-6 h-6 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                                  <AvatarFallback className="text-[9px] font-extrabold bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
+                                    {assignee?.name ? assignee.name.charAt(0).toUpperCase() : '?'}
+                                  </AvatarFallback>
+                                </Avatar>
                               </SelectTrigger>
-                              <SelectContent className="min-w-[245px]">
+                              <SelectContent className="min-w-[220px]">
                                 {users.filter(u => u.role !== UserRole.CLIENT).map(u => (
                                   <SelectItem key={u.id} value={u.id}>
                                     <div className="flex items-center space-x-2">
                                       <Avatar className="w-5 h-5 border shadow-sm">
                                         <AvatarFallback className="text-[8px] font-bold bg-zinc-100 dark:bg-zinc-800">{u.name.charAt(0)}</AvatarFallback>
                                       </Avatar>
-                                      <span className="text-xs">{u.name}</span>
+                                      <span className="text-xs font-medium">{u.name}</span>
                                     </div>
                                   </SelectItem>
                                 ))}

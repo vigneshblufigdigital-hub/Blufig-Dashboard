@@ -577,126 +577,67 @@ function SubtaskInput({
   taskId: string; 
   onAddSubtask: (taskId: string, name: string, assigneeIds?: string[], description?: string) => void;
 }) {
+  const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [showDescription, setShowDescription] = useState(false);
 
   const handleAdd = () => {
     if (!name.trim()) return;
-    onAddSubtask(taskId, name.trim(), [], description.trim() || undefined);
+    onAddSubtask(taskId, name.trim());
     setName('');
-    setDescription('');
-    setShowDescription(false);
   };
 
+  if (!isAdding) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsAdding(true)}
+        className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 rounded-xl transition-all cursor-pointer border border-dashed border-emerald-300/80 dark:border-emerald-800/80 flex items-center gap-2"
+      >
+        <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <span>Add a line</span>
+      </button>
+    );
+  }
+
   return (
-    <div className="p-3 bg-zinc-50/80 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-2.5">
-      {/* Subtask Title Input Row */}
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1">
-          <Input 
-            placeholder="Add sub-task name..." 
-            className="h-9 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-xs pl-8 focus-visible:ring-orange-500/20 font-medium rounded-xl"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !showDescription) {
-                e.preventDefault();
-                handleAdd();
-              }
-            }}
-          />
-          <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-        </div>
-
-        {!showDescription && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-9 px-2.5 text-[11px] font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 flex items-center gap-1.5 rounded-xl cursor-pointer"
-            onClick={() => setShowDescription(true)}
-          >
-            <FileText className="w-3.5 h-3.5 text-orange-500" />
-            <span>+ Description</span>
-          </Button>
-        )}
-
-        {!showDescription && name.trim() && (
-          <Button 
-            type="button"
-            size="sm" 
-            className="h-9 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white shrink-0 px-4 rounded-xl cursor-pointer shadow-sm transition-all flex items-center gap-1"
-            onClick={handleAdd}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add</span>
-          </Button>
-        )}
-      </div>
-
-      {/* Expandable Optional Description Area */}
-      {showDescription && (
-        <div className="pt-1 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="p-3 bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                <FileText className="w-3 h-3 text-orange-500" />
-                <span>Subtask Description (Optional)</span>
-              </span>
-              <DescriptionImageUploader 
-                onAddImage={(imgUrl) => {
-                  setDescription(prev => (prev ? prev + `\n![Image](${imgUrl})\n` : `![Image](${imgUrl})\n`));
-                }}
-              />
-            </div>
-
-            <Textarea
-              placeholder="Add details, notes, or instructions for this subtask..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="text-xs bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 min-h-[60px] resize-y rounded-lg p-2.5"
-            />
-
-            {description && description.includes('![') && (
-              <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                <TaskDescriptionRenderer 
-                  description={description} 
-                  onRemoveImage={(imgUrl) => {
-                    setDescription(prev => prev ? prev.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '') : '');
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Action Row at Bottom of Form (Logical & Ergonomic) */}
-          <div className="flex items-center justify-end space-x-2 pt-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 rounded-lg px-3"
-              onClick={() => {
-                setShowDescription(false);
-                if (!description.trim()) setDescription('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="button"
-              size="sm" 
-              disabled={!name.trim()}
-              className="h-8 text-xs font-bold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-4 rounded-lg cursor-pointer shadow-sm flex items-center gap-1"
-              onClick={handleAdd}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Subtask</span>
-            </Button>
-          </div>
-        </div>
-      )}
+    <div className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all">
+      <Input 
+        placeholder="Subtask title... (Press Enter to add)" 
+        className="h-9 bg-white dark:bg-zinc-950 text-xs border-zinc-200 dark:border-zinc-800 font-medium focus-visible:ring-emerald-500/20 flex-1"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAdd();
+          } else if (e.key === 'Escape') {
+            setIsAdding(false);
+            setName('');
+          }
+        }}
+      />
+      <Button 
+        type="button"
+        size="sm"
+        disabled={!name.trim()}
+        className="h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 shrink-0 rounded-lg cursor-pointer"
+        onClick={handleAdd}
+      >
+        Add
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-9 px-2.5 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg shrink-0 cursor-pointer"
+        onClick={() => {
+          setIsAdding(false);
+          setName('');
+        }}
+      >
+        <X className="w-4 h-4" />
+      </Button>
     </div>
   );
 }
@@ -821,22 +762,24 @@ function EditableSubtaskRow({
 
         {/* Top Right Quick Actions */}
         <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-6 px-2 text-[10px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1",
-              subtask.description ? "text-brand-secondary bg-brand-secondary/10 border border-brand-secondary/20" : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-            )}
-            onClick={() => {
-              setDescInput(subtask.description || '');
-              setIsEditingDesc(!isEditingDesc);
-            }}
-            title={subtask.description ? "Edit subtask description" : "Add description to subtask"}
-          >
-            <FileText className="w-3 h-3 text-brand-secondary" />
-            <span>{subtask.description ? "Description" : "+ Description"}</span>
-          </Button>
+          {subtask.description && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-6 px-1.5 text-[10px] font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1",
+                isEditingDesc ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "text-zinc-400 hover:text-zinc-700 dark:text-zinc-500"
+              )}
+              onClick={() => {
+                setDescInput(subtask.description || '');
+                setIsEditingDesc(!isEditingDesc);
+              }}
+              title="View/Edit Subtask Description"
+            >
+              <FileText className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>Notes</span>
+            </Button>
+          )}
 
           <Button 
             variant="ghost" 
@@ -951,72 +894,45 @@ function EditableSubtaskRow({
         </div>
       </div>
 
-      {/* Description Section */}
-      {(subtask.description || isEditingDesc) && (
+      {/* Optional Description Section (Only shown when explicitly toggled to view/edit notes) */}
+      {isEditingDesc && (
         <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900 space-y-2">
-          {isEditingDesc ? (
-            <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5 text-brand-secondary" />
-                  <span>Subtask Description</span>
-                </span>
-                <DescriptionImageUploader
-                  onAddImage={(imgUrl) => {
-                    setDescInput(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
-                  }}
-                />
-              </div>
-              <Textarea 
-                value={descInput}
-                onChange={(e) => setDescInput(e.target.value)}
-                placeholder="Add detailed instructions, links, or notes for this subtask..."
-                className="text-xs bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 min-h-[60px] resize-y rounded-lg p-2 focus-visible:ring-brand-secondary/20"
-              />
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-[10px] px-2.5"
-                  onClick={() => setIsEditingDesc(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-6 text-[10px] px-3 bg-brand-secondary text-white hover:bg-brand-secondary/90 font-bold"
-                  onClick={handleSaveDesc}
-                >
-                  Save Description
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div 
-              className="p-2.5 bg-zinc-50/80 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl text-xs text-zinc-700 dark:text-zinc-300 group/desc cursor-pointer hover:border-brand-secondary/30 transition-colors"
-              onClick={() => {
-                setDescInput(subtask.description || '');
-                setIsEditingDesc(true);
-              }}
-              title="Click to edit description"
-            >
-              <div className="flex items-center justify-between text-[10px] text-zinc-400 font-medium mb-1">
-                <span className="flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5 text-brand-secondary" />
-                  <span>Subtask Description</span>
-                </span>
-                <Pencil className="w-2.5 h-2.5 text-zinc-400 opacity-0 group-hover/desc:opacity-100" />
-              </div>
-              <TaskDescriptionRenderer 
-                description={subtask.description} 
-                onRemoveImage={(imgUrl) => {
-                  const newDesc = subtask.description?.replace(imgUrl, '').replace(/!\[.*?\]\(\)/g, '');
-                  onUpdateSubtask(taskId, subtask.id, { description: newDesc?.trim() || undefined });
-                  toast.success('Removed image from subtask');
+          <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Subtask Notes</span>
+              </span>
+              <DescriptionImageUploader
+                onAddImage={(imgUrl) => {
+                  setDescInput(prev => (prev || '') + `\n![Image](${imgUrl})\n`);
                 }}
               />
             </div>
-          )}
+            <Textarea 
+              value={descInput}
+              onChange={(e) => setDescInput(e.target.value)}
+              placeholder="Add instructions or notes..."
+              className="text-xs bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 min-h-[50px] resize-y rounded-lg p-2 focus-visible:ring-emerald-500/20"
+            />
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-[10px] px-2.5"
+                onClick={() => setIsEditingDesc(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[10px] px-3 bg-emerald-600 text-white hover:bg-emerald-700 font-bold"
+                onClick={handleSaveDesc}
+              >
+                Save Notes
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -911,7 +911,27 @@ function Dashboard() {
       interval = setInterval(updateTimer, 1000);
 
       const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
+        if (document.hidden && activeTimerTaskId) {
+          // Stop timer when app goes to background
+          const { startTime, initialSeconds } = timerStartRef.current || { startTime: Date.now(), initialSeconds: elapsedTimes[activeTimerTaskId] || 0 };
+          const elapsedSinceStart = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+          const finalSecs = initialSeconds + elapsedSinceStart;
+
+          setActiveTimerTaskId(null);
+          timerStartRef.current = null;
+
+          setTasks(prev => prev.map(t => 
+            t.id === activeTimerTaskId 
+              ? { 
+                  ...t, 
+                  timeLoggedSeconds: finalSecs, 
+                  timeLogged: parseFloat((finalSecs / 3600).toFixed(4)),
+                  updatedAt: new Date().toISOString()
+                } 
+              : t
+          ));
+          toast.info('Timer paused', { description: `Timer auto-stopped when app moved to background (${formatTime(finalSecs)} logged)` });
+        } else if (document.visibilityState === 'visible') {
           updateTimer();
         }
       };
@@ -951,7 +971,34 @@ function Dashboard() {
       interval = setInterval(updateSubTimer, 1000);
 
       const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
+        if (document.hidden && activeTimerSubTaskId) {
+          const { startTime, initialSeconds } = subTaskTimerStartRef.current || { startTime: Date.now(), initialSeconds: subTaskElapsedTimes[activeTimerSubTaskId] || 0 };
+          const elapsedSinceStart = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+          const finalSecs = initialSeconds + elapsedSinceStart;
+
+          setActiveTimerSubTaskId(null);
+          subTaskTimerStartRef.current = null;
+
+          setTasks(prev => prev.map(t => {
+            if (t.subTasks && t.subTasks.some(st => st.id === activeTimerSubTaskId)) {
+              return {
+                ...t,
+                updatedAt: new Date().toISOString(),
+                subTasks: t.subTasks.map(st => 
+                  st.id === activeTimerSubTaskId 
+                    ? {
+                        ...st,
+                        timeLoggedSeconds: finalSecs,
+                        timeLogged: parseFloat((finalSecs / 3600).toFixed(4))
+                      } as any
+                    : st
+                )
+              };
+            }
+            return t;
+          }));
+          toast.info('Subtask timer paused', { description: `Auto-stopped when app moved to background (${formatTime(finalSecs)} logged)` });
+        } else if (document.visibilityState === 'visible') {
           updateSubTimer();
         }
       };

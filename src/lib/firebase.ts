@@ -91,7 +91,8 @@ export async function deleteDocFromFirestore(
  */
 export function syncCollection<T>(
   collectionName: string,
-  onUpdate: (data: T[]) => void
+  onUpdate: (data: T[]) => void,
+  onError?: (error: any) => void
 ) {
   const colRef = collection(db, collectionName);
   return onSnapshot(colRef, (snapshot) => {
@@ -102,6 +103,9 @@ export function syncCollection<T>(
     onUpdate(items);
   }, (error) => {
     console.error(`Error in real-time sync for collection "${collectionName}":`, error);
+    if (onError) {
+      onError(error);
+    }
   });
 }
 

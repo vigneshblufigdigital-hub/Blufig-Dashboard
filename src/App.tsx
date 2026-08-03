@@ -422,6 +422,15 @@ function Dashboard() {
     seedAll();
   }, []);
 
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
+
+  const handleSyncError = React.useCallback((err: any) => {
+    const errStr = String(err?.message || err);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      setQuotaExceeded(true);
+    }
+  }, []);
+
   // Set up real-time onSnapshot sync from Firestore to React State
   React.useEffect(() => {
     const unsubUsers = syncCollection<UserProfile>('users', (data) => {
@@ -435,21 +444,21 @@ function Dashboard() {
       lastSyncedDataRef.current.users = JSON.stringify(updated);
       isSyncingRef.current.users = true;
       setUsers(updated);
-    });
+    }, handleSyncError);
 
     const unsubProjects = syncCollection<Project>('projects', (data) => {
       hasLoadedRef.current.projects = true;
       lastSyncedDataRef.current.projects = JSON.stringify(data);
       isSyncingRef.current.projects = true;
       setProjects(data);
-    });
+    }, handleSyncError);
 
     const unsubTasks = syncCollection<Task>('tasks', (data) => {
       hasLoadedRef.current.tasks = true;
       lastSyncedDataRef.current.tasks = JSON.stringify(data);
       isSyncingRef.current.tasks = true;
       setTasks(data);
-    });
+    }, handleSyncError);
 
     const unsubReports = syncCollection<ClientReport>('reports', (data) => {
       hasLoadedRef.current.reports = true;
@@ -457,7 +466,7 @@ function Dashboard() {
       lastSyncedDataRef.current.reports = JSON.stringify(filtered);
       isSyncingRef.current.reports = true;
       setReports(filtered);
-    });
+    }, handleSyncError);
 
     const unsubInvoices = syncCollection<ClientInvoice>('invoices', (data) => {
       hasLoadedRef.current.invoices = true;
@@ -465,14 +474,14 @@ function Dashboard() {
       lastSyncedDataRef.current.invoices = JSON.stringify(filtered);
       isSyncingRef.current.invoices = true;
       setInvoices(filtered);
-    });
+    }, handleSyncError);
 
     const unsubNotifs = syncCollection<NotificationItem>('notifications', (data) => {
       hasLoadedRef.current.notifications = true;
       lastSyncedDataRef.current.notifications = JSON.stringify(data);
       isSyncingRef.current.notifications = true;
       setAllNotifications(data);
-    });
+    }, handleSyncError);
 
     return () => {
       unsubUsers();
@@ -482,7 +491,7 @@ function Dashboard() {
       unsubInvoices();
       unsubNotifs();
     };
-  }, []);
+  }, [handleSyncError]);
 
   // Sync React State mutations back to Firestore (Add / Update / Delete)
   React.useEffect(() => {
@@ -1967,6 +1976,24 @@ function Dashboard() {
       </AnimatePresence>
       
       <main className="flex-1 flex flex-col min-w-0">
+        {quotaExceeded && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="font-bold shrink-0">⚡ Firebase Quota Reached:</span>
+              <span>
+                Firestore free daily read units limit reached. Real-time sync is temporarily paused and will automatically reset tomorrow. The app is running smoothly in local mode with browser storage.
+              </span>
+            </div>
+            <a 
+              href="https://console.firebase.google.com/project/gen-lang-client-0145079617/firestore/databases/ai-studio-blufigoperations-d297ba01-a7ac-4259-b76e-be482e0c94ef/data?openUpgradeDialog=true" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80 font-semibold shrink-0"
+            >
+              Manage Database & Quota &rarr;
+            </a>
+          </div>
+        )}
         {/* Header */}
         <header className="h-16 flex items-center justify-between px-4 sm:px-8 bg-card border-b border-border sticky top-0 z-10 gap-4 transition-colors duration-200">
           <div className="flex items-center space-x-3 sm:space-x-4 flex-1 max-w-xl">

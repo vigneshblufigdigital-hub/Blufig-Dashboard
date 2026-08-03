@@ -12,7 +12,7 @@ import {
 import { Clock, Calendar, ArrowUpRight, BarChart3, MoreHorizontal, Play, Pause, Square, FileSpreadsheet, Trash2, Edit, Plus, ChevronLeft, ChevronRight, Search, Filter, RotateCcw, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Task, Project, UserRole, UserProfile } from '@/src/types';
+import { Task, Project, UserRole, UserProfile, TaskStatus, Priority } from '@/src/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -320,8 +320,9 @@ export function TimeSheet({
       // D. Merge manual cell edit overrides
       if (customDailySeconds[task.id]) {
         Object.entries(customDailySeconds[task.id]).forEach(([dKey, secs]) => {
-          if (secs > 0) {
-            dailySeconds[dKey] = secs;
+          const s = Number(secs);
+          if (s > 0) {
+            dailySeconds[dKey] = s;
           } else {
             delete dailySeconds[dKey];
           }

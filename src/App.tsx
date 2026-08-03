@@ -395,15 +395,24 @@ function Dashboard() {
     });
   }, [allNotifications, user, tasks]);
 
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
+
+  const handleSyncError = React.useCallback((err: any) => {
+    const errStr = String(err?.message || err);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      setQuotaExceeded(true);
+    }
+  }, []);
+
   // Seed data once when the component mounts
   React.useEffect(() => {
     const seedAll = async () => {
-      await seedCollectionIfEmpty('users', MOCK_USERS);
-      await seedCollectionIfEmpty('projects', MOCK_PROJECTS);
-      await seedCollectionIfEmpty('tasks', MOCK_TASKS);
+      await seedCollectionIfEmpty('users', MOCK_USERS, handleSyncError);
+      await seedCollectionIfEmpty('projects', MOCK_PROJECTS, handleSyncError);
+      await seedCollectionIfEmpty('tasks', MOCK_TASKS, handleSyncError);
       
-      await seedCollectionIfEmpty('reports', []);
-      await seedCollectionIfEmpty('invoices', []);
+      await seedCollectionIfEmpty('reports', [], handleSyncError);
+      await seedCollectionIfEmpty('invoices', [], handleSyncError);
 
       try {
         await deleteDocFromFirestore('reports', 'rep-1');
@@ -416,20 +425,11 @@ function Dashboard() {
         await deleteDocFromFirestore('notifications', 'noti-3');
         await deleteDocFromFirestore('notifications', 'noti-4');
       } catch (e) {
-        console.error("Clean up of mock documents failed", e);
+        handleSyncError(e);
       }
     };
     seedAll();
-  }, []);
-
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
-
-  const handleSyncError = React.useCallback((err: any) => {
-    const errStr = String(err?.message || err);
-    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
-      setQuotaExceeded(true);
-    }
-  }, []);
+  }, [handleSyncError]);
 
   // Set up real-time onSnapshot sync from Firestore to React State
   React.useEffect(() => {

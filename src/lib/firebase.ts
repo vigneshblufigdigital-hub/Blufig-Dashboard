@@ -34,7 +34,8 @@ export const db = initializeFirestore(app, {
  */
 export async function seedCollectionIfEmpty<T extends { id: string }>(
   collectionName: string, 
-  defaultData: T[]
+  defaultData: T[],
+  onError?: (error: any) => void
 ) {
   try {
     const colRef = collection(db, collectionName);
@@ -50,7 +51,15 @@ export async function seedCollectionIfEmpty<T extends { id: string }>(
       console.log(`Seeding collection "${collectionName}" completed successfully.`);
     }
   } catch (error) {
-    console.error(`Error seeding collection "${collectionName}":`, error);
+    const errStr = String((error as any)?.message || error);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      console.warn(`Firestore quota exceeded while checking/seeding collection "${collectionName}".`);
+    } else {
+      console.error(`Error seeding collection "${collectionName}":`, error);
+    }
+    if (onError) {
+      onError(error);
+    }
   }
 }
 
@@ -65,8 +74,12 @@ export async function saveDocToFirestore<T extends { id: string }>(
     const docRef = doc(db, collectionName, data.id);
     await setDoc(docRef, data);
   } catch (error) {
-    console.error(`Error saving document inside "${collectionName}" with ID "${data.id}":`, error);
-    throw error;
+    const errStr = String((error as any)?.message || error);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      console.warn(`Firestore quota exceeded while saving document to "${collectionName}".`);
+    } else {
+      console.error(`Error saving document inside "${collectionName}" with ID "${data.id}":`, error);
+    }
   }
 }
 
@@ -81,8 +94,12 @@ export async function deleteDocFromFirestore(
     const docRef = doc(db, collectionName, docId);
     await deleteDoc(docRef);
   } catch (error) {
-    console.error(`Error deleting document inside "${collectionName}" with ID "${docId}":`, error);
-    throw error;
+    const errStr = String((error as any)?.message || error);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      console.warn(`Firestore quota exceeded while deleting document from "${collectionName}".`);
+    } else {
+      console.error(`Error deleting document inside "${collectionName}" with ID "${docId}":`, error);
+    }
   }
 }
 
@@ -102,7 +119,12 @@ export function syncCollection<T>(
     });
     onUpdate(items);
   }, (error) => {
-    console.error(`Error in real-time sync for collection "${collectionName}":`, error);
+    const errStr = String(error?.message || error);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      console.warn(`Firestore quota exceeded for collection "${collectionName}". Real-time sync paused.`);
+    } else {
+      console.error(`Error in real-time sync for collection "${collectionName}":`, error);
+    }
     if (onError) {
       onError(error);
     }
@@ -124,7 +146,12 @@ export async function getDocFromFirestore<T>(
     }
     return null;
   } catch (error) {
-    console.error(`Error fetching document inside "${collectionName}" with ID "${docId}":`, error);
+    const errStr = String((error as any)?.message || error);
+    if (errStr.includes('Quota exceeded') || errStr.includes('resource-exhausted')) {
+      console.warn(`Firestore quota exceeded while fetching document from "${collectionName}".`);
+    } else {
+      console.error(`Error fetching document inside "${collectionName}" with ID "${docId}":`, error);
+    }
     return null;
   }
 }

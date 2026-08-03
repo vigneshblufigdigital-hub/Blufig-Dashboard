@@ -1856,6 +1856,7 @@ function Dashboard() {
           onRemoveInvoice={handleRemoveInvoice} 
         />;
       case 'time':
+      case 'time-tracking':
         return <TimeSheet 
           tasks={tasks}
           setTasks={setTasks}

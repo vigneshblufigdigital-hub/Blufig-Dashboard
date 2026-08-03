@@ -59,6 +59,39 @@ export function TimeSheet({
 }: TimeSheetProps) {
   const { user: currentUser } = useAuth();
 
+  const formatDateKey = (d: Date) => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const getTodayDate = () => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  const getFirstDayOfMonth = () => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+
+  const getWeekRange = (d: Date) => {
+    const current = new Date(d);
+    const day = current.getDay();
+    const diffToMonday = current.getDate() - (day === 0 ? 6 : day - 1);
+    const monday = new Date(current.setDate(diffToMonday));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return {
+      monday,
+      sunday,
+      mondayStr: formatDateKey(monday),
+      sundayStr: formatDateKey(sunday)
+    };
+  };
+
+  const getMonthKey = (d: Date) => {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   const formatLogTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -440,29 +473,6 @@ export function TimeSheet({
     setIsAddingLine(false);
   };
 
-  const formatDateKey = (d: Date) => {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-
-  const getWeekRange = (d: Date) => {
-    const current = new Date(d);
-    const day = current.getDay();
-    const diffToMonday = current.getDate() - (day === 0 ? 6 : day - 1);
-    const monday = new Date(current.setDate(diffToMonday));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return {
-      monday,
-      sunday,
-      mondayStr: formatDateKey(monday),
-      sundayStr: formatDateKey(sunday)
-    };
-  };
-
-  const getMonthKey = (d: Date) => {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  };
-
   const getTimeframeLabel = (mode: TimeframeMode, anchorDate: Date) => {
     if (mode === 'day') {
       const todayStr = formatDateKey(new Date());
@@ -504,16 +514,6 @@ export function TimeSheet({
 
   // Track manual billing overrides for static logs that aren't backed by tasks
   const [staticBillingOverrides, setStaticBillingOverrides] = React.useState<Record<string, 'Billable' | 'Non-Billable'>>({});
-
-  const getFirstDayOfMonth = () => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-  };
-
-  const getTodayDate = () => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  };
 
   const [isExportDialogOpen, setIsExportDialogOpen] = React.useState(false);
   const [startDate, setStartDate] = React.useState(getFirstDayOfMonth());

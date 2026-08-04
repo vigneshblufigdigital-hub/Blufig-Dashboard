@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Represents internal team members and external clients.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "department": { "type": "string", "enum": ["Management", "Client Servicing", "Sales", "Digital", "Content", "Web Development", "HubSpot", "Design", "Human Resources"] },
+        "designation": { "type": "string" },
+        "role": { "type": "string" },
+        "skillTags": { "type": "array", "items": { "type": "string" } },
+        "avatarUrl": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A client engagement (Retainer, One-off, or Always-on).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "accountManagerId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Retainer", "One-Off Project", "Always-On"] },
+        "status": { "type": "string", "enum": ["Active", "On Hold", "Completed", "Cancelled"] },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "accountManagerId", "name", "type", "status"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "The atomic unit of work.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "deliverableId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Not Started", "In Progress", "In Review", "Revision Requested", "Approved", "Done", "Blocked", "Cancelled"] },
+        "priority": { "type": "string", "enum": ["Low", "Normal", "High", "Critical"] },
+        "dueDate": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "timeEstimate": { "type": "number" },
+        "timeLogged": { "type": "number" },
+        "blockerIds": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "name", "type", "status", "priority", "dueDate"]
+    },
+    "Deliverable": {
+      "title": "Deliverable",
+      "description": "A production asset (e.g. ad creative, blog post).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "In Review", "Approved", "Delivered"] },
+        "revisionCount": { "type": "integer" },
+        "assetUrl": { "type": "string" },
+        "clientFeedback": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "taskId", "name", "status"]
+    },
+    "SubTask": {
+      "title": "SubTask",
+      "description": "A smaller, manageable piece of a task.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "taskId": { "type": "string" },
+        "name": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["taskId", "name", "isCompleted"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for staff and clients."
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Primary project documents."
+    },
+    "/projects/{projectId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks belonging to a project."
+    },
+    "/projects/{projectId}/tasks/{taskId}/subtasks/{subtaskId}": {
+      "schema": "SubTask",
+      "description": "Subtasks belonging to a specific task."
+    },
+    "/projects/{projectId}/deliverables/{deliverableId}": {
+      "schema": "Deliverable",
+      "description": "Deliverables linked to a project/task."
+    }
+  }
+}

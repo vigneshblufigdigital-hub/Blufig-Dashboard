@@ -53,7 +53,7 @@ function softenLog(msg: any): string {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Support JSON request bodies with default limit to prevent issues with large tasks/data
   app.use(express.json({ limit: "15mb" }));
